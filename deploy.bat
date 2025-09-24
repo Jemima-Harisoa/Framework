@@ -45,6 +45,29 @@ if ERRORLEVEL 1 (
     echo Copying files failed!
     exit /b 1
 )
+:: Créer un JAR pour tous les servlets du package com
+
+echo Creating JAR for servlets in com...
+
+set JAR_NAME=RedirectionServlet.jar
+set JAR_PATH=%LIB_DIR%\%JAR_NAME%
+
+:: Créer le répertoire LIB_DIR si nécessaire
+if not exist "%LIB_DIR%" (
+    mkdir "%LIB_DIR%"
+)
+
+:: Vérifier si le dossier com existe dans CLASSES_DIR
+if exist "%CLASSES_DIR%\com" (
+    jar -cvf "%JAR_PATH%" -C "%CLASSES_DIR%" com
+    if %ERRORLEVEL% neq 0 (
+        echo Failed to create servlet JAR at %JAR_PATH%!
+        exit /b %ERRORLEVEL%
+    )
+    echo JAR created at: %JAR_PATH%
+) else (
+    echo No "com" classes found in %CLASSES_DIR% - skipping jar creation.
+)
 
 REM -------------------------------
 REM Étape 3 : Créer le fichier .war
