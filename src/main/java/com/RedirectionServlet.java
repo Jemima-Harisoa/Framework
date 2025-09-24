@@ -1,4 +1,4 @@
-package main.java.com;
+package com;
 
 import java.io.IOException;
 import jakarta.servlet.ServletException;
