@@ -30,13 +30,36 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Étape 2 : Copier les fichiers dans le répertoire de build
+# Étape 2a : Copier les fichiers dans le répertoire de build
 echo "Copying files to build directory..."
 cp -r "$WEB_DIR/"* "$BUILD_DIR/"
 if [ $? -ne 0 ]; then
     echo "Copying files failed!"
     exit 1
 fi
+# Étape 2b : Créer un JAR pour tous les servlets du package com
+echo "Creating JAR for servlets in com..."
+# Le JAR sera créé directement dans LIB_DIR
+JAR_NAME="RedirectionServlet.jar"
+JAR_PATH="$LIB_DIR/$JAR_NAME"
+
+# S'assurer que le répertoire LIB_DIR existe
+mkdir -p "$LIB_DIR"
+
+# Créer le JAR depuis les classes compilées dans CLASSES_DIR
+if [ -d "$CLASSES_DIR/com" ]; then
+    jar -cvf "$JAR_PATH" -C "$CLASSES_DIR" com
+    if [ $? -ne 0 ]; then
+        echo "Failed to create servlet JAR at $JAR_PATH"
+        exit 1
+    fi
+    echo "JAR created at: $JAR_PATH"
+else
+    echo "No 'com' classes found in $CLASSES_DIR - skipping jar creation."
+fi
+
+# Plus besoin de copier dans build/WEB-INF/lib, l'app utilisera LIB_DIR directement
+
 
 # Étape 3 : Créer le fichier .war
 echo "Creating the .war file: ${PROJECT_NAME}.war"
