@@ -1,0 +1,18 @@
+
+Framework
+    lib
+        |--->Framework-servlets.jar
+        |--->servlet-api.jar
+    src
+        |--->com
+                |--->RedirectionServlet.java
+Test
+    |--->lib
+    |--->src
+            |--->java
+    |--->webbapp
+                |---> WEB-INF
+                            |--->classes/
+                            |--->lib/
+                            .jsp
+

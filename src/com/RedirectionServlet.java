@@ -1,19 +1,22 @@
 package com;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.PrintWriter;
 
+// Ici on mappe toutes les URLs avec "/*"
+@WebServlet(name = "RedirectionServlet", urlPatterns = { "/" })
 public class RedirectionServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
 
-    private void doService(HttpServletRequest request, HttpServletResponse response) 
+    private void doService(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        
+
         // Récupérer l’URL demandée
         String url = request.getRequestURL().toString();
 
@@ -26,13 +29,13 @@ public class RedirectionServlet extends HttpServlet {
     }
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) 
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         doService(request, response);
     }
 
     @Override
-    protected void doPost(HttpServletRequest request, HttpServletResponse response) 
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         doService(request, response);
     }
