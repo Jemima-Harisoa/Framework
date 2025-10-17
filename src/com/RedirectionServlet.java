@@ -11,7 +11,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.RequestDispatcher;
 
 
-// Ici on mappe toutes les URLs avec "/*"
+// Ici on mappe toutes les URLs avec "/"
 @WebServlet(name = "RedirectionServlet", urlPatterns = { "/" })
 public class RedirectionServlet extends HttpServlet {
 
