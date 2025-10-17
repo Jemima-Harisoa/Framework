@@ -4,9 +4,12 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.RequestDispatcher;
+
 
 // Ici on mappe toutes les URLs avec "/*"
 @WebServlet(name = "RedirectionServlet", urlPatterns = { "/" })
@@ -17,15 +20,19 @@ public class RedirectionServlet extends HttpServlet {
     private void doService(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        // Récupérer l’URL demandée
-        String url = request.getRequestURL().toString();
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        if ("/".equals(path)) {
+            response.getWriter().println("/");
+            return;
+        }
+        boolean resourceExists = getServletContext().getResource(path) != null;
 
-        // Configurer la réponse
-        response.setContentType("text/plain");
-        PrintWriter out = response.getWriter();
-
-        // Afficher l’URL
-        out.println("URL demandée : " + url);
+        if (resourceExists) {
+            RequestDispatcher defaultDispatcher = getServletContext().getNamedDispatcher("default");
+            defaultDispatcher.forward(request, response);
+        } else {
+            response.getWriter().println(path);
+        }
     }
 
     @Override
