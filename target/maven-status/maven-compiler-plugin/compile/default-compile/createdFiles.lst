@@ -1,1 +1,12 @@
+test/UserService.class
+Main.class
+test/Util.class
+lookup/AnnotationAnalyzer.class
+annotations/AnnotationAttribut.class
+test/ProductService.class
+annotations/AnnotationMethod.class
+lookup/AnnotationAnalyzer$AnnotationAnalysisResult.class
+annotations/Controller.class
+lookup/ClassScanner$ClassFilter.class
+lookup/ClassScanner.class
 com/RedirectionServlet.class
