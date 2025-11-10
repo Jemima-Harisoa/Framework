@@ -1,7 +1,8 @@
-// Fichier : RedirectionServlet.java (version modifiée)
+// Fichier : RedirectionServlet.java
 package com;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,40 +117,135 @@ public class RedirectionServlet extends HttpServlet {
     private void doService(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        response.setContentType("text/plain;charset=UTF-8");
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
-        StringBuilder output = new StringBuilder();
-        
-        // Afficher l'URL demandée
-        output.append("URL demandée: ").append(path).append("\n\n");
-        
-        // Cas de la racine - Afficher toutes les informations
+        // Cas de la racine - Afficher toutes les informations (TEST - COMMENTÉ POUR LE MOMENT)
         if ("/".equals(path)) {
-            displayHomePage(output);
+            // displayHomePage(response); // COMMENTÉ - Activation pour tests seulement
+            // return;
             
-        } else if (isUrlMappedToMethod(path)) {
-            // Afficher les informations de la méthode mappée
-            displayMethodMappingInfo(path, output, request.getMethod());
-            
-        } else if (isUrlMappedToController(path)) {
-            // Afficher les informations du contrôleur spécifique
-            displayControllerInfo(path, output);
-            
-        } else {
-            // Vérifier si c'est une ressource statique
-            handleStaticResource(request, response, path, output);
+            // Pour l'instant, rediriger vers une page par défaut
+            RequestDispatcher dispatcher = request.getRequestDispatcher("/index.jsp");
+            dispatcher.forward(request, response);
+            return;
         }
         
-        if (!response.isCommitted()) {
-            response.getWriter().println(output.toString());
+        // Vérifier si l'URL correspond à une méthode mappée
+        if (isUrlMappedToMethod(path)) {
+            // Exécuter la méthode mappée et gérer la redirection
+            boolean handled = executeMappedMethod(request, response, path);
+            if (handled) {
+                return; // La réponse a été gérée
+            }
+        }
+        
+        // Vérifier si l'URL correspond à un contrôleur (COMMENTÉ POUR LE MOMENT)
+        /* if (isUrlMappedToController(path)) {
+            // displayControllerInfo(response, path); // COMMENTÉ - Activation pour tests seulement
+            // return;
+        } */
+        
+        // Vérifier si c'est une ressource statique
+        boolean resourceExists = getServletContext().getResource(path) != null;
+        if (resourceExists) {
+            RequestDispatcher defaultDispatcher = getServletContext().getNamedDispatcher("default");
+            defaultDispatcher.forward(request, response);
+            return;
+        }
+        
+        // Si aucune correspondance n'est trouvée, erreur 404
+        response.sendError(HttpServletResponse.SC_NOT_FOUND, "Ressource non trouvée: " + path);
+    }
+    
+    /**
+     * Exécute la méthode mappée et redirige vers la vue JSP
+     * 
+     * @param request la requête HTTP
+     * @param response la réponse HTTP
+     * @param path le chemin de l'URL
+     * @return true si la méthode a été exécutée avec succès, false sinon
+     */
+    private boolean executeMappedMethod(HttpServletRequest request, HttpServletResponse response, String path) {
+        try {
+            MappedMethod mappedMethod = getMappedMethodForUrl(path);
+            String httpMethod = request.getMethod();
+            
+            // Vérifier la correspondance de la méthode HTTP
+            if (!mappedMethod.getHttpMethod().equalsIgnoreCase(httpMethod)) {
+                response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED, 
+                    "Méthode " + httpMethod + " non autorisée. Méthode attendue: " + mappedMethod.getHttpMethod());
+                return true;
+            }
+            
+            // Récupérer la méthode et sa classe
+            Method method = mappedMethod.getMethod();
+            Class<?> controllerClass = method.getDeclaringClass();
+            
+            // Créer une instance du contrôleur
+            Object controllerInstance = controllerClass.getDeclaredConstructor().newInstance();
+            
+            // Exécuter la méthode
+            Object result = method.invoke(controllerInstance);
+            
+            // Vérifier que le résultat est une String (nom de la vue)
+            if (result instanceof String) {
+                String viewName = (String) result;
+                String viewPath = buildViewPath(viewName);
+                
+                // Vérifier si la vue existe
+                if (getServletContext().getResource(viewPath) != null) {
+                    // Rediriger vers la vue JSP
+                    RequestDispatcher dispatcher = request.getRequestDispatcher(viewPath);
+                    dispatcher.forward(request, response);
+                    return true;
+                } else {
+                    response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                        "Vue non trouvée: " + viewPath);
+                    return true;
+                }
+            } else {
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                    "La méthode doit retourner un String (nom de la vue)");
+                return true;
+            }
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            try {
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, 
+                    "Erreur lors de l'exécution de la méthode: " + e.getMessage());
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+            return true;
         }
     }
     
     /**
-     * Affiche la page d'accueil avec toutes les informations
+     * Construit le chemin complet vers la vue JSP
+     * 
+     * @param viewName le nom de la vue retourné par la méthode
+     * @return le chemin complet vers la JSP
      */
-    private void displayHomePage(StringBuilder output) {
+    private String buildViewPath(String viewName) {
+        // Si la vue contient déjà l'extension .jsp, on l'utilise directement
+        if (viewName.endsWith(".jsp")) {
+            return viewName;
+        }
+        
+        // Sinon, on ajoute le chemin par défaut et l'extension
+        // Vous pouvez modifier ce chemin selon votre structure de projet
+        return  viewName + ".jsp";
+    }
+    
+    /**
+     * Affiche la page d'accueil avec toutes les informations (TEST - COMMENTÉ)
+     */
+    /*
+    private void displayHomePage(HttpServletResponse response) throws IOException {
+        response.setContentType("text/plain;charset=UTF-8");
+        StringBuilder output = new StringBuilder();
+        
         output.append("=== PAGE D'ACCUEIL ===\n\n");
         
         // Afficher les statistiques
@@ -160,36 +256,8 @@ public class RedirectionServlet extends HttpServlet {
         output.append("Méthodes @Mapping trouvées: ").append(urlMethodMap.size()).append("\n");
         output.append("Taux d'annotation: ").append(String.format("%.1f", analysisResult.getAnnotationRatio() * 100)).append("%\n\n");
         
-        // Afficher toutes les classes avec leurs annotations
-        output.append("=== TOUTES LES CLASSES SCANNÉES ===\n");
-        for (Class<?> clazz : allClasses) {
-            output.append("Classe: ").append(clazz.getSimpleName()).append("\n");
-            output.append("Nom complet: ").append(clazz.getName()).append("\n");
-            
-            if (clazz.isAnnotationPresent(Controller.class)) {
-                Controller annotation = clazz.getAnnotation(Controller.class);
-                output.append("Annotation @Controller: OUI\n");
-                output.append("  - Nom: ").append(annotation.name()).append("\n");
-                output.append("  - Description: ").append(annotation.description()).append("\n");
-            } else {
-                output.append("Annotation @Controller: NON\n");
-            }
-            output.append("-------------------------\n");
-        }
-        
-        // Afficher les contrôleurs mappés
-        output.append("\n=== CONTRÔLEURS MAPPÉS ===\n");
-        if (controllerMap.isEmpty()) {
-            output.append("Aucun contrôleur trouvé avec l'annotation @Controller\n");
-        } else {
-            for (String controllerName : controllerMap.keySet()) {
-                Class<?> controllerClass = controllerMap.get(controllerName);
-                output.append("Nom: ").append(controllerName).append(" -> Classe: ").append(controllerClass.getSimpleName()).append("\n");
-            }
-        }
-        
         // Afficher les méthodes mappées
-        output.append("\n=== MÉTHODES MAPPÉES ===\n");
+        output.append("=== MÉTHODES MAPPÉES ===\n");
         if (urlMethodMap.isEmpty()) {
             output.append("Aucune méthode trouvée avec l'annotation @Mapping\n");
         } else {
@@ -204,64 +272,32 @@ public class RedirectionServlet extends HttpServlet {
                 output.append("-------------------------\n");
             }
         }
+        
+        response.getWriter().println(output.toString());
     }
+    */
     
     /**
-     * Affiche les informations d'une méthode mappée
+     * Affiche les informations d'un contrôleur (TEST - COMMENTÉ)
      */
-    private void displayMethodMappingInfo(String path, StringBuilder output, String httpMethod) {
-        MappedMethod mappedMethod = getMappedMethodForUrl(path);
+    /*
+    private void displayControllerInfo(HttpServletResponse response, String path) throws IOException {
+        response.setContentType("text/plain;charset=UTF-8");
+        StringBuilder output = new StringBuilder();
         
-        output.append("✅ MÉTHODE MAPPÉE TROUVÉE\n\n");
-        output.append("URL: ").append(path).append("\n");
-        output.append("Méthode HTTP demandée: ").append(httpMethod).append("\n");
-        output.append("Méthode HTTP configurée: ").append(mappedMethod.getHttpMethod()).append("\n");
-        output.append("Classe: ").append(mappedMethod.getMethod().getDeclaringClass().getSimpleName()).append("\n");
-        output.append("Méthode Java: ").append(mappedMethod.getMethod().getName()).append("\n");
-        output.append("Type de retour: ").append(mappedMethod.getMethod().getReturnType().getSimpleName()).append("\n");
-        output.append("Auteur: ").append(mappedMethod.getAuteur()).append("\n");
-        output.append("Version: ").append(mappedMethod.getVersion()).append("\n");
-        
-        // Vérifier la correspondance de la méthode HTTP
-        if (!mappedMethod.getHttpMethod().equalsIgnoreCase(httpMethod)) {
-            output.append("\n⚠️ ATTENTION: Méthode HTTP non correspondante!\n");
-            output.append("La méthode est configurée pour: ").append(mappedMethod.getHttpMethod()).append("\n");
-        }
-    }
-    
-    /**
-     * Affiche les informations d'un contrôleur
-     */
-    private void displayControllerInfo(String path, StringBuilder output) {
         Class<?> controllerClass = getControllerForUrl(path);
         Controller annotation = controllerClass.getAnnotation(Controller.class);
         
-        output.append("✅ CONTRÔLEUR MAPPÉ TROUVÉ\n\n");
+        output.append("CONTRÔLEUR MAPPÉ TROUVÉ\n\n");
         output.append("URL: ").append(path).append("\n");
         output.append("Nom du contrôleur: ").append(annotation.name()).append("\n");
         output.append("Classe: ").append(controllerClass.getSimpleName()).append("\n");
         output.append("Nom complet: ").append(controllerClass.getName()).append("\n");
         output.append("Description: ").append(annotation.description()).append("\n");
+        
+        response.getWriter().println(output.toString());
     }
-    
-    /**
-     * Gère les ressources statiques
-     */
-    private void handleStaticResource(HttpServletRequest request, HttpServletResponse response, 
-                                    String path, StringBuilder output) throws IOException, ServletException {
-        boolean resourceExists = getServletContext().getResource(path) != null;
-
-        if (resourceExists) {
-            RequestDispatcher defaultDispatcher = getServletContext().getNamedDispatcher("default");
-            defaultDispatcher.forward(request, response);
-        } else {
-            output.append("❌ CHEMIN INCONNU\n\n");
-            output.append("URL: ").append(path).append("\n");
-            output.append("Statut: Aucun contrôleur ou méthode trouvé pour cette URL\n");
-            output.append("Contrôleurs disponibles: ").append(controllerMap.keySet()).append("\n");
-            output.append("URLs de méthodes disponibles: ").append(urlMethodMap.keySet()).append("\n");
-        }
-    }
+    */
     
     /**
      * Vérifie si l'URL correspond à un contrôleur
