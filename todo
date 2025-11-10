@@ -1,0 +1,9 @@
+Sprint 3 : 
+objectif : 
+RedirectionServlet doit a son initialisation faire le scan des fichiers de test-framework
+selon la structure de ce dernier. 
+Ce qu'il faut faire: avec les classe de look up on lance une recherche du systeme de fichier 
+dans le classpath du projet web, on voit si il y a des classes qui appel le controller qu'on
+a fait dans annotations
+une foit les classe troue on va juste les listes avec un out.print en plain text dans le navigateur 
+web quand on appelle le servlet. 

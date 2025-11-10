@@ -1,12 +1,9 @@
 Main.class
-test\UserService.class
 lookup\ClassScanner.class
 com\RedirectionServlet.class
-annotations\AnnotationMethod.class
-test\ProductService.class
 lookup\AnnotationAnalyzer$AnnotationAnalysisResult.class
 annotations\Controller.class
 lookup\ClassScanner$ClassFilter.class
-test\Util.class
+annotations\Mapping.class
 annotations\AnnotationAttribut.class
 lookup\AnnotationAnalyzer.class

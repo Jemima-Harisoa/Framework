@@ -6,8 +6,8 @@ set "ROOT=%cd%"
 set "TARGET_DIR=%ROOT%\target"
 
 REM Détection du projet Test/ ou test/
-set "TEST_DIR=%~dp0..\Test"
-if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0..\test"
+set "TEST_DIR=%~dp0"
+if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0"
 
 set "TEST_LIB=!TEST_DIR!\src\main\webapp\WEB-INF\lib"
 

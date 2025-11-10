@@ -11,6 +11,81 @@ import java.util.List;
  * Fournit des méthodes pour découvrir et charger des classes Java
  */
 public class ClassScanner {
+    /**
+     * Scanne toutes les classes présentes dans WEB-INF/classes
+     * Utilisé pour scanner les classes d'une application web déployée
+     * 
+     * @return liste de toutes les classes trouvées dans WEB-INF/classes
+     * @throws Exception si une erreur survient lors du scan
+     */
+    public List<Class<?>> getAllClassesFromWebInfClasses() throws Exception {
+        List<Class<?>> classes = new ArrayList<>();
+        
+        // Récupère le ClassLoader pour accéder aux ressources
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        
+        // Récupère l'URL du répertoire racine des classes (WEB-INF/classes)
+        URL resource = classLoader.getResource("");
+        
+        if (resource == null) {
+            System.err.println("Impossible de trouver le répertoire des classes");
+            return classes;
+        }
+        
+        System.out.println("Scan du répertoire: " + resource.getPath());
+        
+        File classesDir = new File(resource.getFile());
+        
+        if (classesDir.exists() && classesDir.isDirectory()) {
+            // Scanner récursivement depuis la racine avec un package vide
+            classes.addAll(scanDirectory(classesDir, ""));
+        }
+        
+        return classes;
+    }
+
+    /**
+     * Scanne récursivement un répertoire pour trouver toutes les classes
+     * 
+     * @param directory le répertoire à scanner
+     * @param packagePrefix le préfixe de package actuel
+     * @return liste des classes trouvées
+     */
+    private List<Class<?>> scanDirectory(File directory, String packagePrefix) {
+        List<Class<?>> classes = new ArrayList<>();
+        
+        File[] files = directory.listFiles();
+        if (files == null) return classes;
+        
+        for (File file : files) {
+            if (file.isDirectory()) {
+                // Construire le nouveau préfixe de package
+                String newPrefix = packagePrefix.isEmpty() 
+                    ? file.getName() 
+                    : packagePrefix + "." + file.getName();
+                
+                // Scanner récursivement le sous-répertoire
+                classes.addAll(scanDirectory(file, newPrefix));
+                
+            } else if (file.getName().endsWith(".class")) {
+                // Construire le nom complet de la classe
+                String className = packagePrefix.isEmpty()
+                    ? file.getName().substring(0, file.getName().length() - 6)
+                    : packagePrefix + "." + file.getName().substring(0, file.getName().length() - 6);
+                
+                try {
+                    // Charger la classe
+                    Class<?> clazz = Class.forName(className);
+                    classes.add(clazz);
+                    System.out.println("Classe trouvée: " + className);
+                } catch (Exception e) {
+                    System.err.println("Erreur lors du chargement de: " + className);
+                }
+            }
+        }
+        
+        return classes;
+    }
     
     /**
      * Scanne récursivement un package et retourne toutes les classes qu'il contient
