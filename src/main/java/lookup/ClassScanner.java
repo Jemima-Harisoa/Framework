@@ -32,7 +32,7 @@ public class ClassScanner {
             return classes;
         }
         
-        System.out.println("Scan du répertoire: " + resource.getPath());
+//        System.out.println("Scan du répertoire: " + resource.getPath());
         
         File classesDir = new File(resource.getFile());
         
@@ -77,7 +77,7 @@ public class ClassScanner {
                     // Charger la classe
                     Class<?> clazz = Class.forName(className);
                     classes.add(clazz);
-                    System.out.println("Classe trouvée: " + className);
+                //   System.out.println("Classe trouvée: " + className);
                 } catch (Exception e) {
                     System.err.println("Erreur lors du chargement de: " + className);
                 }
