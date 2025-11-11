@@ -1,11 +1,12 @@
 Main.class
+model\View.class
 lookup\ClassScanner.class
 com\RedirectionServlet.class
 lookup\MappingAnalyzer.class
+annotations\View.class
 lookup\AnnotationAnalyzer$AnnotationAnalysisResult.class
 annotations\Controller.class
 lookup\ClassScanner$ClassFilter.class
 annotations\Mapping.class
 lookup\MappingAnalyzer$MappedMethod.class
-annotations\AnnotationAttribut.class
 lookup\AnnotationAnalyzer.class
