@@ -35,6 +35,55 @@ public class RedirectionServlet extends HttpServlet {
     private AnnotationAnalysisResult analysisResult;
     
     /**
+     * Envoie la View vers la JSP : place les données en attribut(s) et forward vers le template.
+     * @param request HttpServletRequest
+     * @param response HttpServletResponse
+     * @param view objet View contenant template, name et data
+     * @throws ServletException
+     * @throws IOException
+     */
+    private void sendViewResponse(HttpServletRequest request, HttpServletResponse response, View view)
+            throws ServletException, IOException {
+        if (view == null) {
+            throw new IllegalArgumentException("View ne peut pas être null");
+        }
+        
+        String template = view.getTemplate();
+        String name = view.getName();
+        Object data = view.getData();
+        
+        // Nom par défaut si absent
+        if (name == null || name.isBlank()) {
+            name = "model";
+        }
+        
+        // Si getTemplate fournit déjà un chemin (commence par '/'), on l'utilise,
+        // sinon on construit un chemin dans /WEB-INF/views/... et ajoute .jsp si nécessaire.
+        String viewPath = template;
+        if (viewPath == null || viewPath.isBlank()) {
+            // si template absent, utiliser name comme template
+            viewPath = "/" + name;
+        }
+        if (!viewPath.startsWith("/")) {
+            viewPath = "/" + viewPath;
+        }
+        if (!viewPath.endsWith(".jsp")) {
+            viewPath = viewPath + ".jsp";
+        }
+        
+        // Vérifie l'existence de la ressource
+        if (getServletContext().getResource(viewPath) == null) {
+            throw new ServletException("Template JSP introuvable: " + viewPath);
+        }
+        
+        // Place la data dans la requête sous le nom donné
+        request.setAttribute(name, data);
+        
+        // Forward vers la JSP
+        request.getRequestDispatcher(viewPath).forward(request, response);
+    }
+    
+    /**
      * Initialisation du servlet - scanne toutes les classes et construit les mappings
      */
     @Override
@@ -117,7 +166,7 @@ public class RedirectionServlet extends HttpServlet {
     private void doService(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        response.setContentType("text/plain;charset=UTF-8");
+        // response.setContentType("text/plain;charset=UTF-8");
         String path = request.getRequestURI().substring(request.getContextPath().length());
         StringBuilder output = new StringBuilder();
         
@@ -206,6 +255,7 @@ public class RedirectionServlet extends HttpServlet {
      */
     private void executeMappedMethod(HttpServletRequest request, HttpServletResponse response, 
                                 String path, StringBuilder output) {
+        boolean forwarded = false; // indique si on a forwardé vers une JSP (dans ce cas on ne doit pas écrire la réponse)
         try {
             MappedMethod mappedMethod = getMappedMethodForUrl(path);
             String httpMethod = request.getMethod();
@@ -248,7 +298,12 @@ public class RedirectionServlet extends HttpServlet {
             
             // Traitement du résultat selon son type
             output.append("=== RÉSULTAT DE LA MÉTHODE ===\n");
-            output.append("Type de retour: ").append(result.getClass().getSimpleName()).append("\n");
+            if (result == null) {
+                output.append("Valeur: null\n");
+                output.append("Interprétation: Aucune donnée retournée\n");
+            } else {
+                output.append("Type de retour: ").append(result.getClass().getSimpleName()).append("\n");
+            }
             
             if (result instanceof String) {
                 // Cas d'un retour String (nom de vue)
@@ -263,7 +318,15 @@ public class RedirectionServlet extends HttpServlet {
                 output.append("Vue existe: ").append(viewExists ? "OUI" : "NON").append("\n");
                 
                 if (viewExists) {
-                    output.append("Action: Redirection vers ").append(viewPath).append("\n");
+                    // Forward vers la JSP (pas d'attribut data ici)
+                    output.append("Action: Forward vers ").append(viewPath).append("\n");
+                    try {
+                        request.getRequestDispatcher(viewPath).forward(request, response);
+                        forwarded = true;
+                        return; // on a forwardé: on ne doit pas écrire le debug après
+                    } catch (Exception e) {
+                        output.append("Erreur lors du forward: ").append(e.getMessage()).append("\n");
+                    }
                 } else {
                     output.append("Action: Erreur - Vue non trouvée\n");
                 }
@@ -273,7 +336,7 @@ public class RedirectionServlet extends HttpServlet {
                 View view = (View) result;
                 output.append("=== DÉTAILS DE L'OBJET VIEW ===\n");
                 
-                // Utilise la réflexion pour afficher tous les champs
+                // Utilise la réflexion pour afficher tous les champs (debug)
                 Field[] fields = View.class.getDeclaredFields();
                 for (Field field : fields) {
                     field.setAccessible(true);
@@ -282,9 +345,17 @@ public class RedirectionServlet extends HttpServlet {
                 }
                 
                 output.append("\nInterprétation: Objet View avec données\n");
-                output.append("Action: Affichage des données (pas de redirection)\n");
                 
-            } else {
+                // Envoi de la view vers la JSP en plaçant les données en attributs et en forwardant
+                try {
+                    sendViewResponse(request, response, view);
+                    forwarded = true;
+                    return; // forward effectué
+                } catch (Exception e) {
+                    output.append("Erreur lors du dispatch de la View: ").append(e.getMessage()).append("\n");
+                }
+                
+            } else if (result != null) {
                 // Autres types d'objets
                 output.append("Valeur: ").append(result.toString()).append("\n");
                 output.append("Interprétation: Objet de type ").append(result.getClass().getSimpleName()).append("\n");
@@ -307,12 +378,13 @@ public class RedirectionServlet extends HttpServlet {
                 }
             }
         }
-        
-        // ⭐⭐ CORRECTION : Ajouter cette ligne pour envoyer la réponse ⭐⭐
-        try {
-            response.getWriter().println(output.toString());
-        } catch (IOException e) {
-            e.printStackTrace();
+                // Si on n'a pas forwardé, écrire le debug dans la réponse
+        if (!forwarded) {
+            try {
+                response.getWriter().println(output.toString());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
     /**
