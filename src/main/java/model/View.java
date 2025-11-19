@@ -26,6 +26,10 @@ public class View {
         return name;
     }
 
+    public View(String template) {
+        setTemplate(template);
+    }
+
     public View(String name, String template) {
         setName(name);
         setTemplate(template);

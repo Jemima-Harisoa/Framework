@@ -1,3 +1,6 @@
+lookup\ClassScanner$ClassFilter.class
+annotations\Mapping.class
+com\RedirectionServlet$MethodMatchResult.class
 Main.class
 model\View.class
 lookup\ClassScanner.class
@@ -6,7 +9,5 @@ lookup\MappingAnalyzer.class
 annotations\View.class
 lookup\AnnotationAnalyzer$AnnotationAnalysisResult.class
 annotations\Controller.class
-lookup\ClassScanner$ClassFilter.class
-annotations\Mapping.class
 lookup\MappingAnalyzer$MappedMethod.class
 lookup\AnnotationAnalyzer.class
