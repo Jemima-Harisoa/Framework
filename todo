@@ -7,3 +7,43 @@ dans le classpath du projet web, on voit si il y a des classes qui appel le cont
 a fait dans annotations
 une foit les classe troue on va juste les listes avec un out.print en plain text dans le navigateur 
 web quand on appelle le servlet. 
+
+Sprint 5 :
+objectif: 
+Envoye des données vers les pages jsp : ex: liste des produits
+
+Ce qu'il se passe : 
+- Le client envoit une requet de type get
+- Le front servlet fait la redirection vers les controller deleger et map l'url a une fonction
+- La fonction est executer cf Sprint 4
+- On envoye les donne avec la Classe view
+- Le retour est receptionner et deleguer au servlet 
+    - Avec getTemplate on obtien le path vers le fichiers
+    - Avec getData on obtient les donne a envoye 
+    - Avec getName on obtient le nom de la variable 
+- Enfin le tout est envoye vers la page avec dispatcher
+
+Ce qu'il faut faire: 
+- Dans RedirectionServlet:
+    + il faut une fonction qui va receptionner et recuperer les view et appeler le dispatcher
+    + il faut un if-else pour differntier les retour de type string et view apres execution dans
+    doService 
+
+Sprint 6 :
+objectif: 
+Envoye des données vers les servlets : ex formulaire de log in 
+
+Ce qu'il ce passe : 
+- Le client envoit une requet post ou get 
+- Les données demandée peuvent se trouver dans l'url (format rest)
+- Il faut traiter la requete http directement et recuperer les donees 
+- Une fois obtenu les donnees sont traiter dans les controllers 
+
+Ce qu'il faut faire: 
+- Dans RedirectionServlet:
+    + reception des donne de la page view pas (sans appel getParameters)
+    + appelle de la fonction qui va traiter les donne avec invoke et les data transmit seront les 
+    parametre
+    + traitement de retour de la fonction cf sprint 5 
+
+
