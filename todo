@@ -64,7 +64,7 @@ Ce qu'il ce passe :
 
 Ce qu'il faut faire: 
 - Dans RedirectionServlet:
-    + reception des donne de la page view pas (sans appel getParameters)
+    + reception des donne de la page view 
     + appelle de la fonction qui va traiter les donne avec invoke et les data transmit seront les parametre
     + traitement de retour de la fonction cf sprint 5 
 
