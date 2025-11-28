@@ -73,7 +73,7 @@ public class RedirectionServlet extends HttpServlet {
             viewPath = "/" + name;
         }
         if (!viewPath.startsWith("/")) {
-            viewPath = "/WEB-INF/views/" + viewPath;
+            viewPath = "/" + viewPath;
         }
         if (!viewPath.endsWith(".jsp")) {
             viewPath = viewPath + ".jsp";
@@ -328,13 +328,13 @@ public class RedirectionServlet extends HttpServlet {
      * - Injecte les objets sérialisés depuis le body (POST JSON, etc.)
      */
     private Object[] prepareMethodParameters(Method method, Map<String, String> pathVariables,
-                                           HttpServletRequest request, HttpServletResponse response) {
+                                        HttpServletRequest request, HttpServletResponse response) {
         Class<?>[] parameterTypes = method.getParameterTypes();
         java.lang.reflect.Parameter[] parameters = method.getParameters();
         Object[] parametersValues = new Object[parameterTypes.length];
 
         // Récupère les données du formulaire (GET ou POST)
-        Map<String, String> formData = getFormData(request);
+        Map<String, Object> formData = getFormData(request);
 
         // ordered list of path variable values (pattern order)
         java.util.List<String> orderedPathValues = new ArrayList<>();
@@ -353,16 +353,37 @@ public class RedirectionServlet extends HttpServlet {
             } else if (pType == HttpServletResponse.class) {
                 value = response;
             } else if (Map.class.isAssignableFrom(pType)) {
-                // Injection de la Map de variables de chemin
-                value = pathVariables != null ? pathVariables : new HashMap<>();
-            } else {
+                // Si la méthode demande précisément Map<String, Object> -> injecter formData
+                java.lang.reflect.Type genericType = parameters[i].getParameterizedType();
+                boolean injectFormData = false;
+                if (genericType instanceof java.lang.reflect.ParameterizedType) {
+                    java.lang.reflect.ParameterizedType pTypeGeneric = (java.lang.reflect.ParameterizedType) genericType;
+                    java.lang.reflect.Type[] typeArgs = pTypeGeneric.getActualTypeArguments();
+                    if (typeArgs != null && typeArgs.length == 2) {
+                        String arg0 = typeArgs[0].getTypeName();
+                        String arg1 = typeArgs[1].getTypeName();
+                        if (("java.lang.String".equals(arg0) || "String".equals(arg0))
+                                && ("java.lang.Object".equals(arg1) || "Object".equals(arg1))) {
+                            injectFormData = true;
+                        }
+                    }
+                }
+                if (injectFormData) {
+                    // Injection de la Map complète des données du formulaire
+                    value = formData;
+                } else {
+                    // Pour d'autres types de Map (ou si pas de générique), on laisse le fallback (null / default)
+                    value = getDefaultForType(pType);
+                }
+             } else {
                 // Essaye d'injecter depuis : path variables (par nom) -> données formulaire (par nom) -> ordonnés
                 String byPathName = pathVariables != null ? pathVariables.get(pName) : null;
                 if (byPathName != null) {
                     value = convertParameterValue(byPathName, pType);
                 } else {
-                    String byFormName = formData.get(pName);
+                    Object byFormName = formData.get(pName);
                     if (byFormName != null) {
+                        // convertParameterValue now accepte Object pour gérer String et String[]
                         value = convertParameterValue(byFormName, pType);
                     } else {
                         // fallback : consomme les valeurs path dans l'ordre
@@ -383,23 +404,27 @@ public class RedirectionServlet extends HttpServlet {
         return parametersValues;
     }
     
-    
     /**
      * Récupère les données du formulaire (GET ou POST)
      * @param request la requête HTTP
      * @return map des paramètres
      */
-    private Map<String, String> getFormData(HttpServletRequest request) {
-        Map<String, String> data = new HashMap<>();
+    private Map<String, Object> getFormData(HttpServletRequest request) {
+        Map<String, Object> data = new HashMap<>();
         
-        // Récupère tous les paramètres (GET ou POST)
+        // Récupère tous les paramètres (GET ou POST) -- gère valeurs multiples
         java.util.Enumeration<String> paramNames = request.getParameterNames();
         while (paramNames.hasMoreElements()) {
             String paramName = paramNames.nextElement();
-            String paramValue = request.getParameter(paramName);
-            data.put(paramName, paramValue);
+            String[] paramValues = request.getParameterValues(paramName);
+            if (paramValues == null) {
+                data.put(paramName, null);
+            } else if (paramValues.length == 1) {
+                data.put(paramName, paramValues[0]);
+            } else {
+                data.put(paramName, paramValues);
+            }
         }
-        
         return data;
     }
     
@@ -416,14 +441,33 @@ public class RedirectionServlet extends HttpServlet {
         return null;
     }
 
-    private Object convertParameterValue(String value, Class<?> targetType) {
+    private Object convertParameterValue(Object value, Class<?> targetType) {
         if (value == null) return getDefaultForType(targetType);
         try {
-            if (targetType == String.class) return value;
-            if (targetType == Integer.class || targetType == int.class) return Integer.parseInt(value);
-            if (targetType == Long.class || targetType == long.class) return Long.parseLong(value);
-            if (targetType == Double.class || targetType == double.class) return Double.parseDouble(value);
-            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.parseBoolean(value);
+            // Si multiple valeurs (String[]) : retourner le tableau si cible attend un tableau sinon
+            if (value instanceof String[]) {
+                String[] arr = (String[]) value;
+                if (arr.length == 1) {
+                    value = arr[0];
+                } else {
+                    // si cible attend un tableau de String, on renvoie le tableau
+                    if (targetType.isArray() && targetType.getComponentType() == String.class) {
+                        return arr;
+                    }
+                    // sinon on renvoie le tableau brut
+                    return arr;
+                }
+            }
+
+            String stringValue = value.toString();
+            if (targetType == String.class) return stringValue;
+            if (targetType == Integer.class || targetType == int.class) return Integer.parseInt(stringValue);
+            if (targetType == Long.class || targetType == long.class) return Long.parseLong(stringValue);
+            if (targetType == Double.class || targetType == double.class) return Double.parseDouble(stringValue);
+            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.parseBoolean(stringValue);
+            if (targetType == Float.class || targetType == float.class) return Float.parseFloat(stringValue);
+            if (targetType == Short.class || targetType == short.class) return Short.parseShort(stringValue);
+            if (targetType == Byte.class || targetType == byte.class) return Byte.parseByte(stringValue);
         } catch (Exception ex) {
             return getDefaultForType(targetType);
         }
