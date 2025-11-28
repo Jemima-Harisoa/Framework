@@ -29,6 +29,29 @@ Ce qu'il faut faire:
     + il faut un if-else pour differntier les retour de type string et view apres execution dans
     doService 
 
+
+Sprint 3 ter: 
+objectif: mettre en place un url dynamique (ex: /products/{id})
+
+Ce qu'il se passe : 
+- l'info dans {} sera traiter comme une variable 
+    + on doit pouvoir recuperer cette variable dans la fonction du controller
+    + on doit pouvoir l'utiliser dans la fonction avant invoke dans executeMappedMethod
+    + dans les fonctions mapper dans le controller : la fonction avec le type d'url a accolade recupere un/des 
+    parametres 
+    
+Ce qu'il faut faire:
+- Determiner la partie de l'url qui contient cette partie (ex: /products/12 est maper avec /products/{id})
+    + voir dans le cas ou il y a une accolade l'url est reconnu comme flexible elle pourra ette mapper avec un url qui presente des similitude avec celle ci  (ex: si on /products/12/categorie est maper avec /products/{id}/categorie/{idcategorie}) => on peut d'abords voir les url de type /products/ et on continue a concatener 
+    suivant l'url demande 
+    + MappedMethod dans MappingAnalyzer est cence avoir une liste d'argument pour chaque mapped methode 
+    en faisant un explode sur l'url =>  /products/{id}/categorie/{idcategorie} => on a 2 argument id et idcategorie on fait un substring  et on note ou les accolade se trouve id get(1) et idcategorie get (3) 
+    + lorsqu'on recoit une url on la traite avec un substring de meme sorte que les partie qui corresponnde sont definit comme argument 
+    + a l'execution de la methode les argument si il y en a sont integrer a la methode 
+- Recuperer la variable et la placer en argument dans la fonction invoquer 
+- Le proceessus restant suivent leur cours (cf sprint 5)
+
+
 Sprint 6 :
 objectif: 
 Envoye des données vers les servlets : ex formulaire de log in 
@@ -42,8 +65,7 @@ Ce qu'il ce passe :
 Ce qu'il faut faire: 
 - Dans RedirectionServlet:
     + reception des donne de la page view pas (sans appel getParameters)
-    + appelle de la fonction qui va traiter les donne avec invoke et les data transmit seront les 
-    parametre
+    + appelle de la fonction qui va traiter les donne avec invoke et les data transmit seront les parametre
     + traitement de retour de la fonction cf sprint 5 
 
 
