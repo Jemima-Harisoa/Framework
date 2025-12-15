@@ -96,6 +96,38 @@ Sprint 7 :
 Mettre une distinction entre get et post mapping 
 
 Sprint 8 :
-objectif:
+objectif: Construction d'un map pour gerer les donne envoyer via formulaire (post et get)
+Ce qu'il se passe : 
+- Les données envoyées via un formulaire POST ou GET sont récupérées dans la requête HTTP
+- Ces données doivent être mappées à des paramètres de méthode dans les contrôleurs
+- Un map est créé pour stocker les paramètres nommés et leurs valeurs extraites de la requête
+- Lors de l'appel à une méthode annotée, ces paramètres sont passés en argument
 
+Ce qu'il faut faire:
+La fonctioon invoquer est decrite comme suit : 
+    + Dans RedirectionServlet, lors du traitement d'une requête POST ou GET, extraire les paramètres de la requête et les stocker dans un Map<String, Object>
+    + Lors de l'invocation de la méthode mappée, vérifier si elle accepte un Map<String, Object> comme paramètre => n'importe quelle type de map ne devrait pas forcement etre de type string object si le type est clairement definit et non un simple object la logic est différente
+    + Si oui, passer ce map lors de l'appel à la méthode
+@PostMapping("/products/create")
+public View createProduct(Map<String, Object> params) {  // Utilise "quantity" comme nom
+    String productName = (String) params.get("name");
+    double price = (Double) params.get("price");
+    int quantity = (Integer) params.get("quantity");
+    Product product = new Product(productName, price, quantity);
+    productService.addProduct(product);
+    return new View("success", "Product created successfully");
+}
+
+Sprint 8 bis:
+objectif: Gestion des types primitifs et des objets complexes dans les paramètres de méthode
+Ce qu'il se passe :
+- Les méthodes des contrôleurs peuvent accepter des types primitifs (int, double, etc.) ou des objets complexes (User, Product, etc.) comme paramètres
+- Lors de l'invocation de ces méthodes, les paramètres doivent être correctement mappés et convertis en fonction de leur type
+- Un mécanisme de conversion est mis en place pour gérer cette diversité de types 
+- Le binding d'objet complexe est etablit  apartir du formulaire on fesant une correspondance entre les champs du formulaire et les attributs de la méthode
+Ce qu'il faut faire:
+- Dans RedirectionServlet, lors de l'invocation d'une méthode mappée, analyser les paramètres attendus
+- Pour chaque paramètre, vérifier son type
+    + Si c'est un type primitif, extraire la valeur correspondante de la requête et la convertir
+    + Si c'est un objet complexe, créer une instance de cet objet et remplir ses attributs en fonction des données de la requête
 
