@@ -240,7 +240,7 @@ public class RedirectionServlet extends HttpServlet {
             
             // Invoque la méthode du contrôleur
             Object result = method.invoke(controllerInstance, parameters);
-            
+
             // Traite le résultat selon son type
             if (result instanceof View) {
                 // Si c'est un objet View, envoie vers la JSP
@@ -255,7 +255,16 @@ public class RedirectionServlet extends HttpServlet {
                 response.getWriter().println(result != null ? result.toString() : "null");
             }
             
-        } catch (Exception e) {
+        }
+        catch (IllegalArgumentException e) {
+            // Gestion spécifique des erreurs de conversion de paramètres
+            response.setStatus(400); // Bad Request
+            response.setContentType("text/html;charset=UTF-8");
+            response.getWriter().println("<h1>400 - Requête incorrecte</h1>");
+            response.getWriter().println("<p>Erreur de paramètre: " + e.getMessage() + "</p>");
+            e.printStackTrace(response.getWriter());
+        }  
+        catch (Exception e) {
             throw new ServletException("Erreur lors de l'exécution de la méthode mappée: " + e.getMessage(), e);
         }
     }
