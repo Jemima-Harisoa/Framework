@@ -1,7 +1,6 @@
 package com;
 
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +18,26 @@ import lookup.MappingAnalyzer.MappedMethod;
  * - L'extraction des variables de chemin (path variables)
  */
 public class MappingHelper {
+    
+    /**
+     * Extrait le nom du paramètre à partir de l'annotation @RequestParam ou utilise le nom du paramètre Java
+     * 
+     * @param parameter Le paramètre de la méthode
+     * @param annotations Les annotations du paramètre
+     * @return Le nom du paramètre à utiliser pour le mapping
+     */
+    public String getParameterName(java.lang.reflect.Parameter parameter, 
+                                annotations.RequestParam requestParamAnnotation) {
+        if (requestParamAnnotation != null && 
+            requestParamAnnotation.value() != null && 
+            !requestParamAnnotation.value().isEmpty()) {
+            // Utilise le nom spécifié dans l'annotation
+            return requestParamAnnotation.value();
+        } else {
+            // Utilise le nom du paramètre Java
+            return parameter.getName();
+        }
+    }
     
     /**
      * Classe interne pour stocker le résultat de la correspondance d'une méthode dynamique
@@ -183,9 +202,11 @@ public class MappingHelper {
      * @param request La requête HTTP
      * @param response La réponse HTTP
      * @return Un tableau d'objets contenant les valeurs des paramètres dans le bon ordre
+     * @throws IllegalArgumentException si un paramètre requis n'est pas trouvé
      */
     public Object[] prepareMethodParameters(Method method, Map<String, String> pathVariables,
-                                           HttpServletRequest request, HttpServletResponse response) {
+                                        HttpServletRequest request, HttpServletResponse response) 
+            throws IllegalArgumentException {
         Class<?>[] parameterTypes = method.getParameterTypes();
         java.lang.reflect.Parameter[] parameters = method.getParameters();
         Object[] parametersValues = new Object[parameterTypes.length];
@@ -193,15 +214,9 @@ public class MappingHelper {
         // Récupère les données du formulaire (GET ou POST)
         Map<String, String> formData = getFormData(request);
 
-        // Liste ordonnée des valeurs de path variables (dans l'ordre du pattern)
-        java.util.List<String> orderedPathValues = new ArrayList<>();
-        if (pathVariables != null) {
-            orderedPathValues.addAll(pathVariables.values());
-        }
-
         for (int i = 0; i < parameterTypes.length; i++) {
             Class<?> pType = parameterTypes[i];
-            String pName = parameters[i].getName();
+            java.lang.reflect.Parameter parameter = parameters[i];
             Object value = null;
 
             // Injection spéciale pour les types servlets
@@ -213,23 +228,43 @@ public class MappingHelper {
                 // Injection de la Map de variables de chemin
                 value = pathVariables != null ? pathVariables : new HashMap<>();
             } else {
-                // Essaye d'injecter depuis : path variables (par nom) -> données formulaire (par nom) -> ordonnés
-                String byPathName = pathVariables != null ? pathVariables.get(pName) : null;
-                if (byPathName != null) {
-                    value = convertParameterValue(byPathName, pType);
-                } else {
-                    String byFormName = formData.get(pName);
-                    if (byFormName != null) {
-                        value = convertParameterValue(byFormName, pType);
-                    } else {
-                        // fallback : consomme les valeurs path dans l'ordre
-                        if (!orderedPathValues.isEmpty()) {
-                            String val = orderedPathValues.remove(0);
-                            value = convertParameterValue(val, pType);
+                // Vérifie si le paramètre a l'annotation @RequestParam
+                annotations.RequestParam requestParamAnnotation = 
+                    parameter.getAnnotation(annotations.RequestParam.class);
+                
+                // Détermine le nom du paramètre à utiliser
+                String paramName = getParameterName(parameter, requestParamAnnotation);
+                
+                boolean valueFound = false;
+                
+                // Recherche dans les path variables
+                if (pathVariables != null && pathVariables.containsKey(paramName)) {
+                    value = convertParameterValue(pathVariables.get(paramName), pType);
+                    valueFound = true;
+                } 
+                // Recherche dans les données du formulaire
+                else if (formData.containsKey(paramName)) {
+                    value = convertParameterValue(formData.get(paramName), pType);
+                    valueFound = true;
+                }
+                
+                // Si aucune valeur n'a été trouvée
+                if (!valueFound) {
+                    if (requestParamAnnotation != null) {
+                        // Avec @RequestParam mais valeur non trouvée
+                        if (pType.isPrimitive()) {
+                            throw new IllegalArgumentException(
+                                String.format("Paramètre requis non trouvé: '%s'. Le paramètre annoté @RequestParam '%s' (type: %s) est requis mais n'a pas été fourni.",
+                                            paramName, parameter.getName(), pType.getSimpleName()));
                         } else {
-                            // aucune valeur disponible -> valeurs par défaut pour primitives / null pour objets
-                            value = getDefaultForType(pType);
+                            // Pour les objets, on peut utiliser null
+                            value = null;
                         }
+                    } else {
+                        // SANS annotation @RequestParam et valeur non trouvée = ERREUR
+                        throw new IllegalArgumentException(
+                            String.format("Paramètre non mappé: '%s'. Le paramètre '%s' (type: %s) n'est pas annoté avec @RequestParam et ne correspond à aucun paramètre de la requête.",
+                                        paramName, parameter.getName(), pType.getSimpleName()));
                     }
                 }
             }
@@ -238,7 +273,7 @@ public class MappingHelper {
         }
 
         return parametersValues;
-    }
+    }     
     
     /**
      * Récupère les données du formulaire (GET ou POST)
@@ -287,19 +322,35 @@ public class MappingHelper {
      * 
      * @param value La valeur à convertir (String)
      * @param targetType Le type cible souhaité
-     * @return La valeur convertie ou la valeur par défaut si la conversion échoue
+     * @return La valeur convertie
+     * @throws IllegalArgumentException si la conversion échoue pour un type non-primitif
      */
     public Object convertParameterValue(String value, Class<?> targetType) {
-        if (value == null) return getDefaultForType(targetType);
+        if (value == null) {
+            return getDefaultForType(targetType);
+        }
+        
         try {
             if (targetType == String.class) return value;
             if (targetType == Integer.class || targetType == int.class) return Integer.parseInt(value);
             if (targetType == Long.class || targetType == long.class) return Long.parseLong(value);
             if (targetType == Double.class || targetType == double.class) return Double.parseDouble(value);
             if (targetType == Boolean.class || targetType == boolean.class) return Boolean.parseBoolean(value);
-        } catch (Exception ex) {
-            return getDefaultForType(targetType);
+            if (targetType == Float.class || targetType == float.class) return Float.parseFloat(value);
+            if (targetType == Short.class || targetType == short.class) return Short.parseShort(value);
+            if (targetType == Byte.class || targetType == byte.class) return Byte.parseByte(value);
+        } catch (NumberFormatException | NullPointerException ex) {
+            // Pour les types primitifs, retourne la valeur par défaut
+            if (targetType.isPrimitive()) {
+                return getDefaultForType(targetType);
+            }
+            // Pour les types objets, lance une exception
+            throw new IllegalArgumentException(
+                String.format("Impossible de convertir la valeur '%s' en type %s", 
+                            value, targetType.getSimpleName()), ex);
         }
+        
+        // Si le type n'est pas supporté, retourne la valeur telle quelle
         return value;
     }
 }

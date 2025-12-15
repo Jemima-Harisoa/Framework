@@ -68,4 +68,34 @@ Ce qu'il faut faire:
     + appelle de la fonction qui va traiter les donne avec invoke et les data transmit seront les parametre
     + traitement de retour de la fonction cf sprint 5 
 
+2- Spécification du traitement de donné: 
+Sachant que Les données envoye depuis le formulaire sont deja mapper avec un controller: 
+    + Établir un system associatif de nom avec annotation @RequestParam (a créer) ex : si dans formulaire, attribut name='prenom' et name='id' on match ces valeur avec les attributs demander par les fonction le cast sera avalue par rapport au type => raise exception faitre correspondre les argument avec le bon type
+    
+    <form method="POST" action="/products">
+        <label for="productName">Nom du produit:</label>
+        <input type="text" id="productName" name="id" required />
+        <button type="submit">Ajouter</button>
+    </form>
+
+    @Mapping("/products") // default method get
+    public View getProduct(@Requeastparam int id) {// @Requeastparam=> optionnel 
+        // Logic metier 
+        return new View("product", "product", this.productList.get(index)); // ici le nom de la vue dans le dossier webapps
+    }
+
+    + A defaut d'avoir une coordination nom et argument on fait un machin des argument avec les types => @Requestparam prend l'argument pour donner le nom coordonner avec l'attribut et la variable
+
+    @Mapping("/products") // default method get
+    public View getProduct(int index) {
+        // Logic metier 
+        return new View("product", "product", this.productList.get(index)); // ici le nom de la vue dans le dossier webapps
+    }
+
+Sprint 7 :
+Mettre une distinction entre get et post mapping 
+
+Sprint 8 :
+objectif:
+
 

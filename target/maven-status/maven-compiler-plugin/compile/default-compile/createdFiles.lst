@@ -11,6 +11,7 @@ lookup\MappingAnalyzer.class
 annotations\View.class
 com\MappingHelper.class
 annotations\GetMapping.class
+annotations\RequestParam.class
 lookup\AnnotationAnalyzer$AnnotationAnalysisResult.class
 annotations\Controller.class
 lookup\MappingAnalyzer$MappedMethod.class
