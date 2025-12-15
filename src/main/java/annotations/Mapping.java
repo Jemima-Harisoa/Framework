@@ -20,3 +20,5 @@ public @interface Mapping {
     // Version (optionnel)
     int version() default 1;
 }
+
+
