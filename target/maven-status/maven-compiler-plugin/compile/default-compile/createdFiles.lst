@@ -1,12 +1,16 @@
+com\MappingHelper$MethodMatchResult.class
 lookup\ClassScanner$ClassFilter.class
 annotations\Mapping.class
-com\RedirectionServlet$MethodMatchResult.class
+annotations\PostMapping.class
+com\HomePageRenderer.class
 Main.class
 model\View.class
 lookup\ClassScanner.class
 com\RedirectionServlet.class
 lookup\MappingAnalyzer.class
 annotations\View.class
+com\MappingHelper.class
+annotations\GetMapping.class
 lookup\AnnotationAnalyzer$AnnotationAnalysisResult.class
 annotations\Controller.class
 lookup\MappingAnalyzer$MappedMethod.class

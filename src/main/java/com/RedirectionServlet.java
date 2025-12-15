@@ -4,9 +4,10 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.MappingHelper.MethodMatchResult;
 
 import annotations.Controller;
 import jakarta.servlet.ServletException;
@@ -24,81 +25,49 @@ import model.View;
 /**
  * Servlet principale qui gère le routage des requêtes HTTP
  * Scanne automatiquement les classes et méthodes annotées pour le mapping des URLs
+ * 
+ * Cette version refactorisée délègue :
+ * - La logique métier à MappingHelper
+ * - L'affichage HTML à HomePageRenderer
  */
 @WebServlet(name = "RedirectionServlet", urlPatterns = { "/" })
 public class RedirectionServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
     
+    // Maps et listes pour stocker les mappings
     private Map<String, MappedMethod> urlMethodMap = new HashMap<>();
     private List<MappedMethod> dynamicUrlMethods = new ArrayList<>();
     private List<Class<?>> allClasses;
     private AnnotationAnalysisResult analysisResult;
     
-    /**
-     * Classe interne pour stocker le résultat de la correspondance d'une méthode dynamique
-     */
-    private static class MethodMatchResult {
-        private final MappedMethod mappedMethod;
-        private final Map<String, String> pathVariables;
-        
-        public MethodMatchResult(MappedMethod mappedMethod, Map<String, String> pathVariables) {
-            this.mappedMethod = mappedMethod;
-            this.pathVariables = pathVariables;
-        }
-        
-        public MappedMethod getMappedMethod() { return mappedMethod; }
-        public Map<String, String> getPathVariables() { return pathVariables; }
-    }
-    
-    /**
-     * Envoie la View vers la JSP : place les données en attribut(s) et forward vers le template.
-     */
-    private void sendViewResponse(HttpServletRequest request, HttpServletResponse response, View view)
-            throws ServletException, IOException {
-        if (view == null) {
-            throw new IllegalArgumentException("View ne peut pas être null");
-        }
-        
-        String template = view.getTemplate();
-        String name = view.getName();
-        Object data = view.getData();
-        
-        if (name == null || name.isBlank()) {
-            name = "model";
-        }
-        
-        String viewPath = template;
-        if (viewPath == null || viewPath.isBlank()) {
-            viewPath = "/" + name;
-        }
-        if (!viewPath.startsWith("/")) {
-            viewPath = "/" + viewPath;
-        }
-        if (!viewPath.endsWith(".jsp")) {
-            viewPath = viewPath + ".jsp";
-        }
-        
-        if (getServletContext().getResource(viewPath) == null) {
-            throw new ServletException("Template JSP introuvable: " + viewPath);
-        }
-        
-        request.setAttribute(name, data);
-        request.getRequestDispatcher(viewPath).forward(request, response);
-    }
+    // Classes helper pour déléguer les opérations
+    private MappingHelper mappingHelper;
+    private HomePageRenderer homePageRenderer;
     
     /**
      * Initialisation du servlet - scanne toutes les classes et construit les mappings
+     * Cette méthode est appelée une seule fois au démarrage de l'application
      */
     @Override
     public void init() throws ServletException {
         try {
+            // Initialisation des helpers
+            mappingHelper = new MappingHelper();
+            homePageRenderer = new HomePageRenderer();
+            
+            // Scanner et analyseur pour trouver les classes et annotations
             ClassScanner classScanner = new ClassScanner();
             AnnotationAnalyzer annotationAnalyzer = new AnnotationAnalyzer();
             MappingAnalyzer mappingAnalyzer = new MappingAnalyzer();
             
+            // Scan de toutes les classes dans WEB-INF/classes
             allClasses = classScanner.getAllClassesFromWebInfClasses();
+            
+            // Analyse des classes avec l'annotation @Controller
             analysisResult = annotationAnalyzer.analyzeClasses(allClasses, Controller.class);
+            
+            // Construction des mappings URL -> Méthode
             buildMethodMappings(mappingAnalyzer, allClasses);
                       
         } catch (Exception e) {
@@ -107,7 +76,11 @@ public class RedirectionServlet extends HttpServlet {
     }
     
     /**
-     * Construit la map des URLs vers les méthodes annotées avec @Mapping
+     * Construit la map des URLs vers les méthodes annotées avec @Mapping, @GetMapping et @PostMapping
+     * Sépare les URLs statiques (ex: /users) des URLs dynamiques (ex: /users/{id})
+     * 
+     * @param mappingAnalyzer L'analyseur de mappings
+     * @param allClasses La liste de toutes les classes scannées
      */
     private void buildMethodMappings(MappingAnalyzer mappingAnalyzer, List<Class<?>> allClasses) {
         Map<Class<?>, List<MappedMethod>> allMethodMappings = mappingAnalyzer.analyzeMethodMappings(allClasses);
@@ -122,9 +95,11 @@ public class RedirectionServlet extends HttpServlet {
 
                 String normalizedUrl = url.startsWith("/") ? url.substring(1) : url;
 
+                // Si l'URL contient des accolades {}, c'est une URL dynamique
                 if (url.contains("{")) {
                     dynamicUrlMethods.add(mappedMethod);
                 } else {
+                    // URL statique : on l'ajoute dans la map
                     String key = normalizedUrl;
                     if (urlMethodMap.containsKey(key)) {
                         System.err.println("Conflit de mapping pour l'URL: " + key);
@@ -135,12 +110,20 @@ public class RedirectionServlet extends HttpServlet {
         }
     }
     
+    /**
+     * Gère les requêtes HTTP GET
+     * Délègue le traitement à doService()
+     */
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         doService(request, response);
     }
 
+    /**
+     * Gère les requêtes HTTP POST
+     * Délègue le traitement à doService()
+     */
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
@@ -149,26 +132,39 @@ public class RedirectionServlet extends HttpServlet {
 
     /**
      * Méthode principale de traitement des requêtes
+     * Détermine quelle action entreprendre en fonction de l'URL demandée :
+     * - Affiche la page d'accueil si l'URL est "/"
+     * - Exécute la méthode mappée si une correspondance est trouvée
+     * - Retourne une erreur 404 si aucune correspondance n'est trouvée
+     * 
+     * @param request La requête HTTP entrante
+     * @param response La réponse HTTP à envoyer
      */
     private void doService(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        // Extrait le chemin de l'URL (sans le contexte de l'application)
         String path = request.getRequestURI().substring(request.getContextPath().length());
         
+        // Si c'est la racine "/", affiche la page d'accueil
         if ("/".equals(path)) {
             displayHomePage(request, response);
             return;
         }
         
-        if (isUrlMappedToMethod(path)) {
+        // Vérifie si l'URL correspond à une méthode mappée
+        if (mappingHelper.isUrlMappedToMethod(path, request.getMethod(), urlMethodMap, dynamicUrlMethods)) {
             executeMappedMethod(request, response, path);
             return;
         }
         
+        // Vérifie si c'est une ressource statique (fichier CSS, JS, image, etc.)
         boolean resourceExists = getServletContext().getResource(path) != null;
         if (resourceExists) {
+            // Laisse le conteneur servir la ressource statique
             return;
         } else {
+            // Aucune correspondance trouvée : erreur 404
             response.setStatus(404);
             response.setContentType("text/html;charset=UTF-8");
             response.getWriter().println("<h1>404 - Page non trouvée</h1>");
@@ -177,315 +173,40 @@ public class RedirectionServlet extends HttpServlet {
     }
     
     /**
-     * Affiche la page d'accueil avec toutes les informations
+     * Affiche la page d'accueil avec toutes les informations de débogage
+     * Délègue l'affichage à HomePageRenderer
+     * 
+     * @param request La requête HTTP
+     * @param response La réponse HTTP
      */
     private void displayHomePage(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
-        
-        response.setContentType("text/html;charset=UTF-8");
-        StringBuilder html = new StringBuilder();
-        
-        html.append("<!DOCTYPE html>");
-        html.append("<html><head><title>Framework MVC - Informations</title>");
-        html.append("<style>");
-        html.append("body { font-family: Arial, sans-serif; margin: 40px; }");
-        html.append("h1 { color: #333; }");
-        html.append(".section { margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }");
-        html.append(".mapping { background: #f9f9f9; padding: 10px; margin: 5px 0; }");
-        html.append("</style>");
-        html.append("</head><body>");
-        
-        html.append("<h1>Framework MVC - Informations de Débogage</h1>");
-        
-        html.append("<div class='section'>");
-        html.append("<h2>Statistiques</h2>");
-        html.append("<p><strong>Total classes scannées:</strong> ").append(analysisResult.getTotalClasses()).append("</p>");
-        html.append("<p><strong>Classes annotées @Controller:</strong> ").append(analysisResult.getAnnotatedCount()).append("</p>");
-        html.append("<p><strong>Classes non annotées:</strong> ").append(analysisResult.getNonAnnotatedCount()).append("</p>");
-        html.append("<p><strong>Méthodes @Mapping trouvées:</strong> ").append(urlMethodMap.size() + dynamicUrlMethods.size()).append("</p>");
-        html.append("<p><strong>Taux d'annotation:</strong> ").append(String.format("%.1f", analysisResult.getAnnotationRatio() * 100)).append("%</p>");
-        html.append("</div>");
-        
-        html.append("<div class='section'>");
-        html.append("<h2>Méthodes Mappées</h2>");
-        if (urlMethodMap.isEmpty() && dynamicUrlMethods.isEmpty()) {
-            html.append("<p>Aucune méthode trouvée avec l'annotation @Mapping</p>");
-        } else {
-            for (String url : urlMethodMap.keySet()) {
-                MappedMethod mappedMethod = urlMethodMap.get(url);
-                html.append("<div class='mapping'>");
-                html.append("<p><strong>URL:</strong> /").append(url).append("</p>");
-                html.append("<p><strong>Méthode HTTP:</strong> ").append(mappedMethod.getHttpMethod()).append("</p>");
-                html.append("<p><strong>Classe:</strong> ").append(mappedMethod.getMethod().getDeclaringClass().getSimpleName()).append("</p>");
-                html.append("<p><strong>Méthode Java:</strong> ").append(mappedMethod.getMethod().getName()).append("</p>");
-                html.append("<p><strong>Type de retour:</strong> ").append(mappedMethod.getMethod().getReturnType().getSimpleName()).append("</p>");
-                html.append("<p><strong>Auteur:</strong> ").append(mappedMethod.getAuteur()).append("</p>");
-                html.append("<p><strong>Version:</strong> ").append(mappedMethod.getVersion()).append("</p>");
-                html.append("</div>");
-            }
-            for (MappedMethod mappedMethod : dynamicUrlMethods) {
-                html.append("<div class='mapping'>");
-                html.append("<p><strong>URL:</strong> ").append(mappedMethod.getUrl()).append(" (dynamique)</p>");
-                html.append("<p><strong>Méthode HTTP:</strong> ").append(mappedMethod.getHttpMethod()).append("</p>");
-                html.append("<p><strong>Classe:</strong> ").append(mappedMethod.getMethod().getDeclaringClass().getSimpleName()).append("</p>");
-                html.append("<p><strong>Méthode Java:</strong> ").append(mappedMethod.getMethod().getName()).append("</p>");
-                html.append("<p><strong>Type de retour:</strong> ").append(mappedMethod.getMethod().getReturnType().getSimpleName()).append("</p>");
-                html.append("<p><strong>Auteur:</strong> ").append(mappedMethod.getAuteur()).append("</p>");
-                html.append("<p><strong>Version:</strong> ").append(mappedMethod.getVersion()).append("</p>");
-                html.append("</div>");
-            }
-        }
-        html.append("</div>");
-        
-        html.append("</body></html>");
-        
-        response.getWriter().println(html.toString());
-    }
-    
-    /**
-     * Vérifie si l'URL correspond à une méthode mappée (statique ou dynamique)
-     */
-    private boolean isUrlMappedToMethod(String urlPath) {
-        if (urlPath == null || urlPath.equals("/") || urlPath.isEmpty()) {
-            return false;
-        }
-
-        String methodUrl = extractPathWithoutSlash(urlPath);
-
-        if (urlMethodMap.containsKey(methodUrl)) {
-            return true;
-        }
-
-        return findMatchingDynamicMethod(urlPath) != null;
-    }
-
-    /**
-     * Récupère la méthode mappée correspondant à l'URL
-     */
-    private MappedMethod getMappedMethodForUrl(String urlPath) {
-        String methodUrl = extractPathWithoutSlash(urlPath);
-        return urlMethodMap.get(methodUrl);
-    }
-    
-    /**
-     * Extrait le chemin sans le slash initial
-     */
-    private String extractPathWithoutSlash(String urlPath) {
-        return urlPath.startsWith("/") ? urlPath.substring(1) : urlPath;
-    }
-    
-    /**
-     * Cherche une méthode dynamique qui correspond à l'URL
-     */
-    private MethodMatchResult findMatchingDynamicMethod(String urlPath) {
-        String normalized = extractPathWithoutSlash(urlPath);
-        String[] actualSegments = normalized.split("/");
-
-        for (MappedMethod mappedMethod : dynamicUrlMethods) {
-            String pattern = mappedMethod.getUrl();
-            String normalizedPattern = pattern.startsWith("/") ? pattern.substring(1) : pattern;
-            String[] patternSegments = normalizedPattern.split("/");
-
-            if (patternSegments.length != actualSegments.length) {
-                continue;
-            }
-
-            Map<String, String> extracted = matchPatternAndExtractVariables(patternSegments, actualSegments);
-            if (extracted != null) {
-                return new MethodMatchResult(mappedMethod, extracted);
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Compare deux tableaux de segments et extrait les variables
-     */
-    private Map<String, String> matchPatternAndExtractVariables(String[] patternSegments, String[] actualSegments) {
-        Map<String, String> vars = new LinkedHashMap<>();
-        for (int i = 0; i < patternSegments.length; i++) {
-            String p = patternSegments[i];
-            String a = actualSegments[i];
-
-            if (p.startsWith("{") && p.endsWith("}")) {
-                String varName = p.substring(1, p.length() - 1).trim();
-                if (varName.isEmpty()) return null;
-                vars.put(varName, a);
-            } else {
-                if (!p.equals(a)) {
-                    return null;
-                }
-            }
-        }
-        return vars;
-    }
-    
-    /**
-     * Prépare les paramètres pour l'appel de la méthode
-     * - Injecte HttpServletRequest / HttpServletResponse
-     * - Injecte les variables de chemin (path parameters)
-     * - Injecte les données du formulaire (request parameters)
-     * - Injecte les objets sérialisés depuis le body (POST JSON, etc.)
-     */
-    private Object[] prepareMethodParameters(Method method, Map<String, String> pathVariables,
-                                        HttpServletRequest request, HttpServletResponse response) {
-        Class<?>[] parameterTypes = method.getParameterTypes();
-        java.lang.reflect.Parameter[] parameters = method.getParameters();
-        Object[] parametersValues = new Object[parameterTypes.length];
-
-        // Récupère les données du formulaire (GET ou POST)
-        Map<String, Object> formData = getFormData(request);
-
-        // ordered list of path variable values (pattern order)
-        java.util.List<String> orderedPathValues = new ArrayList<>();
-        if (pathVariables != null) {
-            orderedPathValues.addAll(pathVariables.values());
-        }
-
-        for (int i = 0; i < parameterTypes.length; i++) {
-            Class<?> pType = parameterTypes[i];
-            String pName = parameters[i].getName();
-            Object value = null;
-
-            // Injection spéciale pour types servlets
-            if (pType == HttpServletRequest.class) {
-                value = request;
-            } else if (pType == HttpServletResponse.class) {
-                value = response;
-            } else if (Map.class.isAssignableFrom(pType)) {
-                // Si la méthode demande précisément Map<String, Object> -> injecter formData
-                java.lang.reflect.Type genericType = parameters[i].getParameterizedType();
-                boolean injectFormData = false;
-                if (genericType instanceof java.lang.reflect.ParameterizedType) {
-                    java.lang.reflect.ParameterizedType pTypeGeneric = (java.lang.reflect.ParameterizedType) genericType;
-                    java.lang.reflect.Type[] typeArgs = pTypeGeneric.getActualTypeArguments();
-                    if (typeArgs != null && typeArgs.length == 2) {
-                        String arg0 = typeArgs[0].getTypeName();
-                        String arg1 = typeArgs[1].getTypeName();
-                        if (("java.lang.String".equals(arg0) || "String".equals(arg0))
-                                && ("java.lang.Object".equals(arg1) || "Object".equals(arg1))) {
-                            injectFormData = true;
-                        }
-                    }
-                }
-                if (injectFormData) {
-                    // Injection de la Map complète des données du formulaire
-                    value = formData;
-                } else {
-                    // Pour d'autres types de Map (ou si pas de générique), on laisse le fallback (null / default)
-                    value = getDefaultForType(pType);
-                }
-             } else {
-                // Essaye d'injecter depuis : path variables (par nom) -> données formulaire (par nom) -> ordonnés
-                String byPathName = pathVariables != null ? pathVariables.get(pName) : null;
-                if (byPathName != null) {
-                    value = convertParameterValue(byPathName, pType);
-                } else {
-                    Object byFormName = formData.get(pName);
-                    if (byFormName != null) {
-                        // convertParameterValue now accepte Object pour gérer String et String[]
-                        value = convertParameterValue(byFormName, pType);
-                    } else {
-                        // fallback : consomme les valeurs path dans l'ordre
-                        if (!orderedPathValues.isEmpty()) {
-                            String val = orderedPathValues.remove(0);
-                            value = convertParameterValue(val, pType);
-                        } else {
-                            // none available -> defaults for primitives / null for objects
-                            value = getDefaultForType(pType);
-                        }
-                    }
-                }
-            }
-
-            parametersValues[i] = value;
-        }
-
-        return parametersValues;
-    }
-    
-    /**
-     * Récupère les données du formulaire (GET ou POST)
-     * @param request la requête HTTP
-     * @return map des paramètres
-     */
-    private Map<String, Object> getFormData(HttpServletRequest request) {
-        Map<String, Object> data = new HashMap<>();
-        
-        // Récupère tous les paramètres (GET ou POST) -- gère valeurs multiples
-        java.util.Enumeration<String> paramNames = request.getParameterNames();
-        while (paramNames.hasMoreElements()) {
-            String paramName = paramNames.nextElement();
-            String[] paramValues = request.getParameterValues(paramName);
-            if (paramValues == null) {
-                data.put(paramName, null);
-            } else if (paramValues.length == 1) {
-                data.put(paramName, paramValues[0]);
-            } else {
-                data.put(paramName, paramValues);
-            }
-        }
-        return data;
-    }
-    
-    private Object getDefaultForType(Class<?> type) {
-        if (!type.isPrimitive()) return null;
-        if (type == boolean.class) return false;
-        if (type == byte.class) return (byte) 0;
-        if (type == short.class) return (short) 0;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == float.class) return 0f;
-        if (type == double.class) return 0d;
-        if (type == char.class) return '\0';
-        return null;
-    }
-
-    private Object convertParameterValue(Object value, Class<?> targetType) {
-        if (value == null) return getDefaultForType(targetType);
-        try {
-            // Si multiple valeurs (String[]) : retourner le tableau si cible attend un tableau sinon
-            if (value instanceof String[]) {
-                String[] arr = (String[]) value;
-                if (arr.length == 1) {
-                    value = arr[0];
-                } else {
-                    // si cible attend un tableau de String, on renvoie le tableau
-                    if (targetType.isArray() && targetType.getComponentType() == String.class) {
-                        return arr;
-                    }
-                    // sinon on renvoie le tableau brut
-                    return arr;
-                }
-            }
-
-            String stringValue = value.toString();
-            if (targetType == String.class) return stringValue;
-            if (targetType == Integer.class || targetType == int.class) return Integer.parseInt(stringValue);
-            if (targetType == Long.class || targetType == long.class) return Long.parseLong(stringValue);
-            if (targetType == Double.class || targetType == double.class) return Double.parseDouble(stringValue);
-            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.parseBoolean(stringValue);
-            if (targetType == Float.class || targetType == float.class) return Float.parseFloat(stringValue);
-            if (targetType == Short.class || targetType == short.class) return Short.parseShort(stringValue);
-            if (targetType == Byte.class || targetType == byte.class) return Byte.parseByte(stringValue);
-        } catch (Exception ex) {
-            return getDefaultForType(targetType);
-        }
-        return value;
+        homePageRenderer.displayHomePage(response, analysisResult, urlMethodMap, dynamicUrlMethods);
     }
     
     /**
      * Exécute la méthode mappée correspondant à l'URL
-     * Gère les path variables et les données du formulaire
+     * Gère :
+     * - La recherche de la méthode (statique ou dynamique)
+     * - La vérification de la méthode HTTP (GET/POST)
+     * - L'injection des paramètres
+     * - L'invocation de la méthode
+     * - Le traitement du résultat (View, String, ou autre)
+     * 
+     * @param request La requête HTTP
+     * @param response La réponse HTTP
+     * @param path Le chemin de l'URL
      */
     private void executeMappedMethod(HttpServletRequest request, HttpServletResponse response, 
                                    String path) throws ServletException, IOException {
         try {
-            MappedMethod mappedMethod = getMappedMethodForUrl(path);
+            // Recherche la méthode mappée (statique ou dynamique)
+            MappedMethod mappedMethod = mappingHelper.getMappedMethodForUrl(path, urlMethodMap);
             Map<String, String> pathVariables = null;
             
             if (mappedMethod == null) {
-                MethodMatchResult matchResult = findMatchingDynamicMethod(path);
+                // Pas trouvé dans les statiques, cherche dans les dynamiques
+                MethodMatchResult matchResult = mappingHelper.findMatchingDynamicMethod(path, dynamicUrlMethods);
                 if (matchResult != null) {
                     mappedMethod = matchResult.getMappedMethod();
                     pathVariables = matchResult.getPathVariables();
@@ -494,36 +215,42 @@ public class RedirectionServlet extends HttpServlet {
                 pathVariables = new HashMap<>();
             }
             
+            // Si aucune méthode trouvée, erreur 404
             if (mappedMethod == null) {
                 response.setStatus(404);
                 response.getWriter().println("Méthode mappée non trouvée pour l'URL: " + path);
                 return;
             }
             
+            // Vérifie que la méthode HTTP correspond
             String requestMethod = request.getMethod();
             String mappingMethod = mappedMethod.getHttpMethod();
-            if (!mappingMethod.equalsIgnoreCase(requestMethod) && !mappingMethod.equalsIgnoreCase("ANY")) {
+            if (!mappingHelper.isMethodMatching(mappingMethod, requestMethod)) {
                 response.setStatus(405);
                 response.getWriter().println("Méthode HTTP non autorisée. Attendu: " + mappingMethod);
                 return;
             }
             
+            // Récupère la méthode Java et crée une instance du contrôleur
             Method method = mappedMethod.getMethod();
             Object controllerInstance = method.getDeclaringClass().getDeclaredConstructor().newInstance();
             
-            // Préparer les paramètres (injecte path variables + form data)
-            Object[] parameters = prepareMethodParameters(method, pathVariables, request, response);
+            // Prépare les paramètres (injection automatique)
+            Object[] parameters = mappingHelper.prepareMethodParameters(method, pathVariables, request, response);
             
-            // Invoquer la méthode
+            // Invoque la méthode du contrôleur
             Object result = method.invoke(controllerInstance, parameters);
             
-            // Traiter le résultat
+            // Traite le résultat selon son type
             if (result instanceof View) {
+                // Si c'est un objet View, envoie vers la JSP
                 sendViewResponse(request, response, (View) result);
             } else if (result instanceof String) {
+                // Si c'est une String, crée une View avec ce nom
                 View view = new View((String) result);
                 sendViewResponse(request, response, view);
             } else {
+                // Pour tout autre type, affiche en texte brut
                 response.setContentType("text/plain;charset=UTF-8");
                 response.getWriter().println(result != null ? result.toString() : "null");
             }
@@ -531,5 +258,49 @@ public class RedirectionServlet extends HttpServlet {
         } catch (Exception e) {
             throw new ServletException("Erreur lors de l'exécution de la méthode mappée: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Envoie la View vers la JSP : place les données en attribut(s) et forward vers le template
+     * 
+     * @param request La requête HTTP
+     * @param response La réponse HTTP
+     * @param view L'objet View contenant les données et le nom du template
+     */
+    private void sendViewResponse(HttpServletRequest request, HttpServletResponse response, View view)
+            throws ServletException, IOException {
+        if (view == null) {
+            throw new IllegalArgumentException("View ne peut pas être null");
+        }
+        
+        String template = view.getTemplate();
+        String name = view.getName();
+        Object data = view.getData();
+        
+        // Si pas de nom spécifié, utilise "model" par défaut
+        if (name == null || name.isBlank()) {
+            name = "model";
+        }
+        
+        // Construction du chemin vers la JSP
+        String viewPath = template;
+        if (viewPath == null || viewPath.isBlank()) {
+            viewPath = "/" + name;
+        }
+        if (!viewPath.startsWith("/")) {
+            viewPath = "/" + viewPath;
+        }
+        if (!viewPath.endsWith(".jsp")) {
+            viewPath = viewPath + ".jsp";
+        }
+        
+        // Vérifie que le template existe
+        if (getServletContext().getResource(viewPath) == null) {
+            throw new ServletException("Template JSP introuvable: " + viewPath);
+        }
+        
+        // Place les données en attribut et forward vers la JSP
+        request.setAttribute(name, data);
+        request.getRequestDispatcher(viewPath).forward(request, response);
     }
 }
