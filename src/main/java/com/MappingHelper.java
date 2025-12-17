@@ -1,6 +1,8 @@
 package com;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -19,6 +21,84 @@ import lookup.MappingAnalyzer.MappedMethod;
  */
 public class MappingHelper {
     
+   /**
+     * Convertit les données du formulaire (Map<String, Object[]>) 
+     * en Map<String, Object> utilisable par les contrôleurs
+     * 
+     * Pour chaque paramètre du formulaire :
+     * - Si c'est un tableau avec une seule valeur, on prend cette valeur
+     * - On essaie de convertir la valeur en son type approprié (Integer, Double, Boolean, etc.)
+     * - Si c'est un tableau avec plusieurs valeurs, on garde le tableau
+     * 
+     * @param formData Les données brutes du formulaire
+     * @return Une map simplifiée avec des objets typés
+     */
+    public Map<String, Object> convertFormDataToObjectMap(Map<String, Object[]> formData) {
+        Map<String, Object> result = new HashMap<>();
+        
+        for (Map.Entry<String, Object[]> entry : formData.entrySet()) {
+            String key = entry.getKey();
+            Object[] values = entry.getValue();
+            
+            if (values == null || values.length == 0) {
+                result.put(key, null);
+                continue;
+            }
+            
+            // Si une seule valeur, on la prend et on essaie de la convertir
+            if (values.length == 1) {
+                String stringValue = values[0].toString();
+                Object convertedValue = smartConvert(stringValue);
+                result.put(key, convertedValue);
+            } else {
+                // Plusieurs valeurs : on garde le tableau
+                result.put(key, values);
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * Essaie de deviner le type d'une valeur String et de la convertir automatiquement
+     * 
+     * Ordre de tentative :
+     * 1. Integer (nombre entier)
+     * 2. Double (nombre décimal)
+     * 3. Boolean (true/false)
+     * 4. String (par défaut si rien d'autre ne fonctionne)
+     * 
+     * @param value La valeur à convertir
+     * @return La valeur convertie dans le type approprié
+     */
+    private Object smartConvert(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return value;
+        }
+        
+        // Essaie de convertir en Integer
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            // Pas un entier, on continue
+        }
+        
+        // Essaie de convertir en Double
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            // Pas un nombre décimal, on continue
+        }
+        
+        // Essaie de convertir en Boolean
+        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+            return Boolean.parseBoolean(value);
+        }
+        
+        // Sinon, on garde la String
+        return value;
+    } 
+
     /**
      * Extrait le nom du paramètre à partir de l'annotation @RequestParam ou utilise le nom du paramètre Java
      * 
@@ -196,6 +276,7 @@ public class MappingHelper {
      * - HttpServletRequest / HttpServletResponse si la méthode les demande
      * - Les variables de chemin (path parameters) extraites de l'URL
      * - Les données du formulaire (request parameters) GET ou POST
+     * - Une Map<String, Object> contenant toutes les données du formulaire si demandée
      * 
      * @param method La méthode à invoquer
      * @param pathVariables Les variables extraites du chemin
@@ -212,7 +293,10 @@ public class MappingHelper {
         Object[] parametersValues = new Object[parameterTypes.length];
 
         // Récupère les données du formulaire (GET ou POST)
-        Map<String, String> formData = getFormData(request);
+        Map<String, Object[]> formData = getFormData(request);
+        
+        // Convertit les données du formulaire en Map<String, Object>
+        Map<String, Object> formDataAsObjectMap = convertFormDataToObjectMap(formData);
 
         for (int i = 0; i < parameterTypes.length; i++) {
             Class<?> pType = parameterTypes[i];
@@ -225,8 +309,31 @@ public class MappingHelper {
             } else if (pType == HttpServletResponse.class) {
                 value = response;
             } else if (Map.class.isAssignableFrom(pType)) {
-                // Injection de la Map de variables de chemin
-                value = pathVariables != null ? pathVariables : new HashMap<>();
+                Type genericType = parameter.getParameterizedType();
+
+                if (genericType instanceof ParameterizedType) {
+                    ParameterizedType pt = (ParameterizedType) genericType;
+                    Type[] typeArgs = pt.getActualTypeArguments();
+
+                    if (typeArgs.length == 2
+                        && typeArgs[0] == String.class
+                        && typeArgs[1] == Object.class) {
+
+                        // ✅ Map<String, Object> → form data
+                        value = formDataAsObjectMap;
+                    } else if (typeArgs[0] == String.class && typeArgs[1] == String.class) {
+
+                        // ✅ Map<String, String> → path variables
+                        value = pathVariables != null ? pathVariables : new HashMap<>();
+                    } else {
+                        throw new IllegalArgumentException(
+                            "Type de Map non supporté : " + genericType.getTypeName()
+                        );
+                    }
+                } else {
+                    // Map sans génériques (Map raw)
+                    value = formDataAsObjectMap;
+                }
             } else {
                 // Vérifie si le paramètre a l'annotation @RequestParam
                 annotations.RequestParam requestParamAnnotation = 
@@ -244,7 +351,7 @@ public class MappingHelper {
                 } 
                 // Recherche dans les données du formulaire
                 else if (formData.containsKey(paramName)) {
-                    value = convertParameterValue(formData.get(paramName), pType);
+                    value = convertParameterValue(formDataAsObjectMap.get(paramName), pType);
                     valueFound = true;
                 }
                 
@@ -273,22 +380,22 @@ public class MappingHelper {
         }
 
         return parametersValues;
-    }     
-    
+    }   
+        
     /**
      * Récupère les données du formulaire (GET ou POST)
      * 
      * @param request La requête HTTP
      * @return Une map contenant tous les paramètres de la requête
      */
-    public Map<String, String> getFormData(HttpServletRequest request) {
-        Map<String, String> data = new HashMap<>();
+    public Map<String, Object[]> getFormData(HttpServletRequest request) {
+        Map<String, Object[]> data = new HashMap<>();
         
         // Récupère tous les paramètres (GET ou POST)
         java.util.Enumeration<String> paramNames = request.getParameterNames();
         while (paramNames.hasMoreElements()) {
             String paramName = paramNames.nextElement();
-            String paramValue = request.getParameter(paramName);
+            Object[] paramValue = request.getParameterValues(paramName);
             data.put(paramName, paramValue);
         }
         
@@ -317,40 +424,86 @@ public class MappingHelper {
     }
 
     /**
-     * Convertit une valeur String en type cible
-     * Supporte les types : String, Integer, Long, Double, Boolean
+     * Convertit un Object en type cible
+     * Gère à la fois les String (non encore converties) et les objets déjà typés
      * 
-     * @param value La valeur à convertir (String)
+     * @param value La valeur à convertir (peut être String, Integer, Double, etc.)
      * @param targetType Le type cible souhaité
      * @return La valeur convertie
-     * @throws IllegalArgumentException si la conversion échoue pour un type non-primitif
+     * @throws IllegalArgumentException si la conversion échoue
      */
-    public Object convertParameterValue(String value, Class<?> targetType) {
+    public Object convertParameterValue(Object value, Class<?> targetType) {
+        // Si la valeur est null
         if (value == null) {
             return getDefaultForType(targetType);
         }
         
+        // Si la valeur est déjà du bon type
+        if (targetType.isInstance(value)) {
+            return value;
+        }
+        
+        // Si la valeur est un tableau (cas des valeurs multiples)
+        if (value.getClass().isArray()) {
+            Object[] array = (Object[]) value;
+            if (array.length > 0) {
+                value = array[0]; // Prend la première valeur
+            } else {
+                return getDefaultForType(targetType);
+            }
+        }
+        
+        // Si c'est une String, utilise l'ancienne méthode de conversion
+        if (value instanceof String) {
+            return convertParameterValue((String) value, targetType);
+        }
+        
+        // Tentative de conversion directe pour les types numériques
         try {
-            if (targetType == String.class) return value;
-            if (targetType == Integer.class || targetType == int.class) return Integer.parseInt(value);
-            if (targetType == Long.class || targetType == long.class) return Long.parseLong(value);
-            if (targetType == Double.class || targetType == double.class) return Double.parseDouble(value);
-            if (targetType == Boolean.class || targetType == boolean.class) return Boolean.parseBoolean(value);
-            if (targetType == Float.class || targetType == float.class) return Float.parseFloat(value);
-            if (targetType == Short.class || targetType == short.class) return Short.parseShort(value);
-            if (targetType == Byte.class || targetType == byte.class) return Byte.parseByte(value);
+            if (targetType == String.class) {
+                return value.toString();
+            }
+            if (targetType == Integer.class || targetType == int.class) {
+                if (value instanceof Number) {
+                    return ((Number) value).intValue();
+                }
+                return Integer.parseInt(value.toString());
+            }
+            if (targetType == Long.class || targetType == long.class) {
+                if (value instanceof Number) {
+                    return ((Number) value).longValue();
+                }
+                return Long.parseLong(value.toString());
+            }
+            if (targetType == Double.class || targetType == double.class) {
+                if (value instanceof Number) {
+                    return ((Number) value).doubleValue();
+                }
+                return Double.parseDouble(value.toString());
+            }
+            if (targetType == Boolean.class || targetType == boolean.class) {
+                if (value instanceof Boolean) {
+                    return value;
+                }
+                return Boolean.parseBoolean(value.toString());
+            }
+            if (targetType == Float.class || targetType == float.class) {
+                if (value instanceof Number) {
+                    return ((Number) value).floatValue();
+                }
+                return Float.parseFloat(value.toString());
+            }
         } catch (NumberFormatException | NullPointerException ex) {
-            // Pour les types primitifs, retourne la valeur par défaut
             if (targetType.isPrimitive()) {
                 return getDefaultForType(targetType);
             }
-            // Pour les types objets, lance une exception
             throw new IllegalArgumentException(
-                String.format("Impossible de convertir la valeur '%s' en type %s", 
-                            value, targetType.getSimpleName()), ex);
+                String.format("Impossible de convertir la valeur '%s' (type: %s) en type %s", 
+                            value, value.getClass().getSimpleName(), targetType.getSimpleName()), ex);
         }
         
-        // Si le type n'est pas supporté, retourne la valeur telle quelle
+        // Si aucune conversion n'est possible, retourne la valeur telle quelle
         return value;
     }
+
 }

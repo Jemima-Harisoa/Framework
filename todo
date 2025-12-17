@@ -119,7 +119,7 @@ public View createProduct(Map<String, Object> params) {  // Utilise "quantity" c
 }
 
 Sprint 8 bis:
-objectif: Gestion des types primitifs et des objets complexes dans les paramètres de méthode
+Objectif: Gestion des types primitifs et des objets complexes dans les paramètres de méthode
 Ce qu'il se passe :
 - Les méthodes des contrôleurs peuvent accepter des types primitifs (int, double, etc.) ou des objets complexes (User, Product, etc.) comme paramètres
 - Lors de l'invocation de ces méthodes, les paramètres doivent être correctement mappés et convertis en fonction de leur type
@@ -129,5 +129,47 @@ Ce qu'il faut faire:
 - Dans RedirectionServlet, lors de l'invocation d'une méthode mappée, analyser les paramètres attendus
 - Pour chaque paramètre, vérifier son type
     + Si c'est un type primitif, extraire la valeur correspondante de la requête et la convertir
-    + Si c'est un objet complexe, créer une instance de cet objet et remplir ses attributs en fonction des données de la requête
+    + Si c'est un objet complexe, créer une instance de cet objet et remplir ses attributs en fonction des données de la requête cf mapping fait dans le sprint 8
 
+Sprint 9: 
+Objectif: Possibilité d'exposition  d'api rest  
+Ce qu'il se passe :
+- Les contrôleurs peuvent exposer des API REST en plus des vues JSP
+- Les méthodes annotées peuvent retourner des objets qui seront sérialisés en JSON
+- Le client peut consommer ces API via des requêtes HTTP
+
+Ce qu'il faut faire:
+- Dans RedirectionServlet, après l'invocation d'une méthode mappée, vérifier le type de retour
+    + Si le type de retour est un objet (et non une vue), sérialiser cet objet en JSON
+    + Envoyer la réponse JSON au client avec le bon en-tête HTTP (Content-Type: application/json)
+@JsonMapping("/api/products/{id}")
+@GetMapping("/api/products/{id}")
+public Product getProductApi(@PathVariable int id) {
+    return productService.getProductById(id); // Retourne un objet Product qui sera sérialisé en JSON
+}
+
+Serialization json a implementer avec une librairie externe type gson ou jackson :
+ex avec gson :
+Gson gson = new Gson();
+String jsonResponse = gson.toJson(yourObject);
+response.setContentType("application/json");
+response.getWriter().write(jsonResponse);
+
+Sprint 10 :
+
+Sprint 11 :
+Objectif: Échange de fichier entre les vues et les controllers
+Ce qu'il se passe :
+- Les utilisateurs peuvent télécharger des fichiers via des formulaires dans les vues JSP
+- Les contrôleurs peuvent traiter ces fichiers (enregistrement, analyse, etc.)
+- Un mécanisme de gestion des fichiers est mis en place pour faciliter cet échange
+Ce qu'il faut faire:
+- Dans RedirectionServlet, lors de la réception d'une requête contenant un fichier, extraire le fichier de la requête
+- Passer le fichier en tant que paramètre à la méthode mappée dans le contrôleur 
+Exemple de code pour un controller qui gère l'upload de fichier :
+@PostMapping("/upload")
+public View handleFileUpload(@RequestParam("file") MultipartFile file) {
+    // Logique pour traiter le fichier
+    fileService.saveFile(file);
+    return new View("uploadSuccess", "File uploaded successfully");
+}

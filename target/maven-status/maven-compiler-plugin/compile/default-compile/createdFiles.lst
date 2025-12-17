@@ -1,6 +1,7 @@
 com\MappingHelper$MethodMatchResult.class
 lookup\ClassScanner$ClassFilter.class
 annotations\Mapping.class
+annotations\PathVariable.class
 annotations\PostMapping.class
 com\HomePageRenderer.class
 Main.class

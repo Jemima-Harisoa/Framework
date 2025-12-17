@@ -308,8 +308,20 @@ public class RedirectionServlet extends HttpServlet {
             throw new ServletException("Template JSP introuvable: " + viewPath);
         }
         
-        // Place les données en attribut et forward vers la JSP
-        request.setAttribute(name, data);
+        // Place les données principales en attribut
+        if (data != null) {
+            request.setAttribute(name, data);
+        }
+        
+        // Place les données supplémentaires en attributs
+        Map<String, Object> additionalData = view.getAdditionalData();
+        if (additionalData != null) {
+            for (Map.Entry<String, Object> entry : additionalData.entrySet()) {
+                request.setAttribute(entry.getKey(), entry.getValue());
+            }
+        }
+        
+        // Forward vers la JSP
         request.getRequestDispatcher(viewPath).forward(request, response);
     }
 }
