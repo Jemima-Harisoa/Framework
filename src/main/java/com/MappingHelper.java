@@ -21,7 +21,39 @@ import lookup.MappingAnalyzer.MappedMethod;
  */
 public class MappingHelper {
     
-   /**
+    /**
+     * Vérifie si un type est un objet complexe (non primitif et non type simple)
+     */
+    public boolean isComplexObjectType(Class<?> type) {
+        // Exclut les types primitifs et leurs wrappers
+        if (type.isPrimitive() || 
+            type == String.class || 
+            type == Integer.class || 
+            type == Long.class || 
+            type == Double.class || 
+            type == Float.class || 
+            type == Boolean.class || 
+            type == Character.class || 
+            type == Byte.class || 
+            type == Short.class) {
+            return false;
+        }
+        
+        // Exclut les types Servlet
+        if (type == HttpServletRequest.class || type == HttpServletResponse.class) {
+            return false;
+        }
+        
+        // Exclut les Map
+        if (Map.class.isAssignableFrom(type)) {
+            return false;
+        }
+        
+        // Pour tous les autres types, considère comme objet complexe
+        return true;
+    }
+    
+    /**
      * Convertit les données du formulaire (Map<String, Object[]>) 
      * en Map<String, Object> utilisable par les contrôleurs
      * 
@@ -334,6 +366,17 @@ public class MappingHelper {
                     // Map sans génériques (Map raw)
                     value = formDataAsObjectMap;
                 }
+            } 
+            // Vérifie si c'est un objet complexe
+            else if (isComplexObjectType(pType)) {
+                // C'est un objet complexe : crée une instance et la remplit avec les données
+                try {
+                    value = ObjectBinder.bindObject(pType, formDataAsObjectMap, pathVariables);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(
+                        String.format("Impossible de créer l'objet %s : %s", 
+                                    pType.getSimpleName(), e.getMessage()), e);
+                }
             } else {
                 // Vérifie si le paramètre a l'annotation @RequestParam
                 annotations.RequestParam requestParamAnnotation = 
@@ -378,7 +421,7 @@ public class MappingHelper {
 
             parametersValues[i] = value;
         }
-
+        
         return parametersValues;
     }   
         
@@ -453,45 +496,31 @@ public class MappingHelper {
             }
         }
         
-        // Si c'est une String, utilise l'ancienne méthode de conversion
-        if (value instanceof String) {
-            return convertParameterValue((String) value, targetType);
-        }
+        // Convertit la valeur en String pour traitement
+        String stringValue = value.toString();
         
         // Tentative de conversion directe pour les types numériques
         try {
             if (targetType == String.class) {
-                return value.toString();
+                return stringValue;
             }
             if (targetType == Integer.class || targetType == int.class) {
-                if (value instanceof Number) {
-                    return ((Number) value).intValue();
-                }
-                return Integer.parseInt(value.toString());
+                return Integer.parseInt(stringValue);
             }
             if (targetType == Long.class || targetType == long.class) {
-                if (value instanceof Number) {
-                    return ((Number) value).longValue();
-                }
-                return Long.parseLong(value.toString());
+                return Long.parseLong(stringValue);
             }
             if (targetType == Double.class || targetType == double.class) {
-                if (value instanceof Number) {
-                    return ((Number) value).doubleValue();
-                }
-                return Double.parseDouble(value.toString());
+                return Double.parseDouble(stringValue);
             }
             if (targetType == Boolean.class || targetType == boolean.class) {
                 if (value instanceof Boolean) {
                     return value;
                 }
-                return Boolean.parseBoolean(value.toString());
+                return Boolean.parseBoolean(stringValue);
             }
             if (targetType == Float.class || targetType == float.class) {
-                if (value instanceof Number) {
-                    return ((Number) value).floatValue();
-                }
-                return Float.parseFloat(value.toString());
+                return Float.parseFloat(stringValue);
             }
         } catch (NumberFormatException | NullPointerException ex) {
             if (targetType.isPrimitive()) {

@@ -2,13 +2,35 @@ package lookup;
 
 import java.lang.annotation.Annotation;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Service d'analyse des annotations sur les classes
  * Fournit des méthodes pour analyser et trier les classes selon leurs annotations
  */
 public class AnnotationAnalyzer {
+
+    /**
+     * Analyse un ensemble de classes et les sépare selon la présence de plusieurs annotations
+     * 
+     * @param classes liste des classes à analyser
+     * @param annotationClasses types d'annotations à rechercher
+     * @return map contenant les résultats pour chaque annotation
+     */
+    public Map<Class<? extends Annotation>, AnnotationAnalysisResult> analyzeMultipleAnnotations(
+            List<Class<?>> classes, 
+            Class<? extends Annotation>... annotationClasses) {
+        
+        Map<Class<? extends Annotation>, AnnotationAnalysisResult> results = new HashMap<>();
+        
+        for (Class<? extends Annotation> annotationClass : annotationClasses) {
+            results.put(annotationClass, analyzeClasses(classes, annotationClass));
+        }
+        
+        return results;
+    }
     
     /**
      * Analyse un ensemble de classes et les sépare selon la présence d'une annotation

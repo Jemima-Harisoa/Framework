@@ -43,12 +43,14 @@ public class RedirectionServlet extends HttpServlet {
     
     // Classes helper pour déléguer les opérations
     private MappingHelper mappingHelper;
-    private HomePageRenderer homePageRenderer;
+    private HomePageRenderer homePageRenderer;    
+    private Map<Class<?>, Object> entityCache = new HashMap<>();
     
     /**
      * Initialisation du servlet - scanne toutes les classes et construit les mappings
      * Cette méthode est appelée une seule fois au démarrage de l'application
      */
+
     @Override
     public void init() throws ServletException {
         try {
@@ -67,14 +69,30 @@ public class RedirectionServlet extends HttpServlet {
             // Analyse des classes avec l'annotation @Controller
             analysisResult = annotationAnalyzer.analyzeClasses(allClasses, Controller.class);
             
+            // Analyse des classes avec l'annotation @Entity
+            AnnotationAnalyzer.AnnotationAnalysisResult entityResult = 
+                annotationAnalyzer.analyzeClasses(allClasses, annotations.Entity.class);
+            
+            // Cache les entités pour référence rapide
+            cacheEntities(entityResult.getAnnotatedClasses());
+            
             // Construction des mappings URL -> Méthode
             buildMethodMappings(mappingAnalyzer, allClasses);
-                      
+                        
         } catch (Exception e) {
             throw new ServletException("Erreur lors de l'initialisation du scan des contrôleurs", e);
         }
     }
-    
+
+    /**
+     * Met en cache les classes d'entité pour référence rapide
+     */
+    private void cacheEntities(List<Class<?>> entityClasses) {
+        for (Class<?> entityClass : entityClasses) {
+            entityCache.put(entityClass, null); // On peut mettre null ou une instance par défaut
+            System.out.println("Entité trouvée: " + entityClass.getName());
+        }
+    }
     /**
      * Construit la map des URLs vers les méthodes annotées avec @Mapping, @GetMapping et @PostMapping
      * Sépare les URLs statiques (ex: /users) des URLs dynamiques (ex: /users/{id})

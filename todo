@@ -130,6 +130,8 @@ Ce qu'il faut faire:
 - Pour chaque paramètre, vérifier son type
     + Si c'est un type primitif, extraire la valeur correspondante de la requête et la convertir
     + Si c'est un objet complexe, créer une instance de cet objet et remplir ses attributs en fonction des données de la requête cf mapping fait dans le sprint 8
+- Il devrait donc y a voir de quoi matcher proprement les variable et les attribut a partir des nomencalture donne cote vue
+ex : <input name='Products.id' >
 
 Sprint 9: 
 Objectif: Possibilité d'exposition  d'api rest  
