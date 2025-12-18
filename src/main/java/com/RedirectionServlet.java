@@ -3,11 +3,14 @@ package com;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.MappingHelper.MethodMatchResult;
+import com.google.gson.Gson;
 
 import annotations.Controller;
 import jakarta.servlet.ServletException;
@@ -45,6 +48,7 @@ public class RedirectionServlet extends HttpServlet {
     private MappingHelper mappingHelper;
     private HomePageRenderer homePageRenderer;    
     private Map<Class<?>, Object> entityCache = new HashMap<>();
+    private Gson gson = new Gson();
     
     /**
      * Initialisation du servlet - scanne toutes les classes et construit les mappings
@@ -78,12 +82,61 @@ public class RedirectionServlet extends HttpServlet {
             
             // Construction des mappings URL -> Méthode
             buildMethodMappings(mappingAnalyzer, allClasses);
+            
                         
         } catch (Exception e) {
             throw new ServletException("Erreur lors de l'initialisation du scan des contrôleurs", e);
         }
     }
 
+    /**
+     * Gère les erreurs en JSON
+     */
+    private void handleJsonError(HttpServletResponse response, int statusCode, 
+                            String error, String message, Exception e) throws IOException {
+        response.setStatus(statusCode);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("timestamp", new Date());
+        errorResponse.put("status", statusCode);
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        
+        // Ajoute la stack trace seulement en développement
+        if (getServletContext().getInitParameter("debug").equals("true")){
+            errorResponse.put("exception", e.getClass().getName());
+            errorResponse.put("trace", Arrays.toString(e.getStackTrace()));
+        }
+        
+        String jsonError = gson.toJson(errorResponse);
+        response.getWriter().write(jsonError);
+    }
+
+    /**
+     * Gère les réponses JSON
+     */
+    private void handleJsonResponse(HttpServletResponse response, Object result, Method method) 
+            throws IOException {
+        
+        // Configure la réponse pour du JSON
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        
+        if (result == null) {
+            // Réponse vide ou null
+            response.getWriter().write("null");
+        } else if (result instanceof String && 
+                method.isAnnotationPresent(annotations.JsonMapping.class)) {
+            // Chaîne de caractères dans une méthode JSON (déjà formatée en JSON)
+            response.getWriter().write((String) result);
+        } else {
+            // Sérialise l'objet en JSON
+            String jsonResponse = gson.toJson(result);
+            response.getWriter().write(jsonResponse);
+        }
+    }
     /**
      * Met en cache les classes d'entité pour référence rapide
      */
@@ -258,8 +311,24 @@ public class RedirectionServlet extends HttpServlet {
             
             // Invoque la méthode du contrôleur
             Object result = method.invoke(controllerInstance, parameters);
+            
+            // =====================================================
+            // Gestion JSON vs JSP
+            // =====================================================
+            
+            boolean isJsonMapping = method.isAnnotationPresent(annotations.JsonMapping.class);
 
-            // Traite le résultat selon son type
+            // ---------- CAS API REST (JSON) ----------
+            if (isJsonMapping) {
+                String jsonResponse = gson.toJson(result);
+                response.setContentType("application/json");
+                response.setCharacterEncoding("UTF-8");
+                response.getWriter().write(jsonResponse);
+                response.getWriter().flush();
+                return;
+            }
+
+            // ---------- CAS JSP CLASSIQUE ----------
             if (result instanceof View) {
                 // Si c'est un objet View, envoie vers la JSP
                 sendViewResponse(request, response, (View) result);

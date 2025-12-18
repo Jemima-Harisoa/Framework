@@ -1,9 +1,11 @@
+annotations\JsonMapping.class
 com\MappingHelper$MethodMatchResult.class
 lookup\ClassScanner$ClassFilter.class
 annotations\Mapping.class
 annotations\PathVariable.class
 annotations\PostMapping.class
 com\HomePageRenderer.class
+com\JsonResponseHandler.class
 Main.class
 model\View.class
 annotations\Entity.class

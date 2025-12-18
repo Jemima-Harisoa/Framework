@@ -158,8 +158,6 @@ response.setContentType("application/json");
 response.getWriter().write(jsonResponse);
 
 Sprint 10 :
-
-Sprint 11 :
 Objectif: Échange de fichier entre les vues et les controllers
 Ce qu'il se passe :
 - Les utilisateurs peuvent télécharger des fichiers via des formulaires dans les vues JSP
