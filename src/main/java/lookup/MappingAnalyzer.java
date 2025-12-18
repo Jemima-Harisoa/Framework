@@ -15,6 +15,13 @@ import annotations.PostMapping;
  * Service d'analyse des méthodes annotées avec @Mapping, @GetMapping et @PostMapping
  */
 public class MappingAnalyzer {
+
+    /**
+     * Vérifie si une méthode retourne du JSON
+     */
+    private boolean isJsonMethod(Method method) {
+        return method.isAnnotationPresent(annotations.JsonMapping.class);
+    }
     
     /**
      * Analyse toutes les méthodes annotées avec @Mapping, @GetMapping ou @PostMapping
