@@ -166,6 +166,8 @@ Ce qu'il se passe :
 Ce qu'il faut faire:
 - Dans RedirectionServlet, lors de la réception d'une requête contenant un fichier, extraire le fichier de la requête
 - Passer le fichier en tant que paramètre à la méthode mappée dans le contrôleur 
+- Se referer au sprint 8 et 8 bis en ajoutant les fallback dans les cas ou les donne envoye sont des / est un ficchier   
+
 Exemple de code pour un controller qui gère l'upload de fichier :
 @PostMapping("/upload")
 public View handleFileUpload(@RequestParam("file") MultipartFile file) {
