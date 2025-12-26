@@ -13,6 +13,7 @@ import com.MappingHelper.MethodMatchResult;
 import com.google.gson.Gson;
 
 import annotations.Controller;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
@@ -34,6 +35,11 @@ import model.View;
  * - L'affichage HTML à HomePageRenderer
  */
 @WebServlet(name = "RedirectionServlet", urlPatterns = { "/" })
+@MultipartConfig(
+    maxFileSize = 1024 * 1024 * 10,      // 10MB max file size
+    maxRequestSize = 1024 * 1024 * 50,   // 50MB max request size
+    fileSizeThreshold = 1024 * 1024      // 1MB avant écriture sur disque
+)
 public class RedirectionServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
@@ -112,6 +118,33 @@ public class RedirectionServlet extends HttpServlet {
         
         String jsonError = gson.toJson(errorResponse);
         response.getWriter().write(jsonError);
+    }
+
+    /**
+     * Gère les erreurs de téléchargement de fichiers
+     */
+    private void handleFileUploadError(HttpServletRequest request, HttpServletResponse response, Exception e) 
+            throws IOException {
+        
+        response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+        
+        // Vérifier si c'est une erreur JSON
+        boolean isJsonRequest = request.getHeader("Accept") != null && 
+                               request.getHeader("Accept").contains("application/json");
+        
+        if (isJsonRequest) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "File upload error");
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", new Date());
+            
+            response.setContentType("application/json");
+            response.getWriter().write(gson.toJson(errorResponse));
+        } else {
+            response.setContentType("text/html;charset=UTF-8");
+            response.getWriter().println("<h1>Erreur lors du téléchargement du fichier</h1>");
+            response.getWriter().println("<p>" + e.getMessage() + "</p>");
+        }
     }
 
     /**
@@ -351,6 +384,17 @@ public class RedirectionServlet extends HttpServlet {
             response.getWriter().println("<p>Erreur de paramètre: " + e.getMessage() + "</p>");
             e.printStackTrace(response.getWriter());
         }  
+        catch (IOException | ServletException e) {
+            // Gestion spécifique des erreurs de fichiers
+            if (e.getMessage() != null && 
+                (e.getMessage().contains("multipart") || 
+                 e.getMessage().contains("file") || 
+                 e.getMessage().contains("size"))) {
+                handleFileUploadError(request, response, e);
+                return;
+            }
+            throw new ServletException("Erreur lors de l'exécution de la méthode mappée: " + e.getMessage(), e);
+        }
         catch (Exception e) {
             throw new ServletException("Erreur lors de l'exécution de la méthode mappée: " + e.getMessage(), e);
         }
