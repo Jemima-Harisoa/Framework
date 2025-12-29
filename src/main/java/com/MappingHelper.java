@@ -1,15 +1,21 @@
 package com;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.Part;
 import lookup.MappingAnalyzer.MappedMethod;
 
 /**
@@ -54,6 +60,40 @@ public class MappingHelper {
     }
     
     /**
+     * Vérifie si la requête contient des fichiers (multipart)
+     */
+    public boolean isMultipartRequest(HttpServletRequest request) {
+        String contentType = request.getContentType();
+        return contentType != null && contentType.toLowerCase().startsWith("multipart/");
+    }
+
+    /**
+     * Extrait les fichiers multipart de la requête
+     */
+    public Map<String, MultipartFile[]> extractMultipartFiles(HttpServletRequest request) 
+            throws IOException, ServletException {
+        
+        Map<String, List<MultipartFile>> temp = new HashMap<>();
+        if (isMultipartRequest(request)) {
+            Collection<Part> parts = request.getParts();
+            for (Part part : parts) {
+                if (part.getSubmittedFileName() != null && !part.getSubmittedFileName().isEmpty()) {
+                    String paramName = part.getName();
+                    temp.computeIfAbsent(paramName, k -> new ArrayList<>())
+                        .add(new StandardMultipartFile(part));
+                }
+            }
+        }
+        // convert to array map for backward compat
+        Map<String, MultipartFile[]> result = new HashMap<>();
+        for (Map.Entry<String, List<MultipartFile>> e : temp.entrySet()) {
+            List<MultipartFile> list = e.getValue();
+            result.put(e.getKey(), list.toArray(new MultipartFile[0]));
+        }
+        return result;
+    }
+    
+    /**
      * Convertit les données du formulaire (Map<String, Object[]>) 
      * en Map<String, Object> utilisable par les contrôleurs
      * 
@@ -77,8 +117,12 @@ public class MappingHelper {
                 continue;
             }
             
-            // Si une seule valeur, on la prend et on essaie de la convertir
-            if (values.length == 1) {
+            // Pour les fichiers MultipartFile, garder l'objet tel quel
+            if (values.length == 1 && values[0] instanceof MultipartFile) {
+                result.put(key, values[0]); // Garder le MultipartFile directement
+            }
+            // Si une seule valeur (pas un fichier), on essaie de la convertir
+            else if (values.length == 1) {
                 String stringValue = values[0].toString();
                 Object convertedValue = smartConvert(stringValue);
                 result.put(key, convertedValue);
@@ -90,7 +134,7 @@ public class MappingHelper {
         
         return result;
     }
-
+    
     /**
      * Essaie de deviner le type d'une valeur String et de la convertir automatiquement
      * 
@@ -302,6 +346,10 @@ public class MappingHelper {
         return vars;
     }
     
+    private boolean isClass(Type t, Class<?> expected) {
+        return t instanceof Class<?> && t == expected;
+    }
+
     /**
      * Prépare les paramètres pour l'appel de la méthode du contrôleur
      * Cette méthode injecte automatiquement :
@@ -319,12 +367,12 @@ public class MappingHelper {
      */
     public Object[] prepareMethodParameters(Method method, Map<String, String> pathVariables,
                                         HttpServletRequest request, HttpServletResponse response) 
-            throws IllegalArgumentException {
+            throws IllegalArgumentException, IOException, ServletException {
         Class<?>[] parameterTypes = method.getParameterTypes();
         java.lang.reflect.Parameter[] parameters = method.getParameters();
         Object[] parametersValues = new Object[parameterTypes.length];
 
-        // Récupère les données du formulaire (GET ou POST)
+        // Récupère les données du formulaire (inclut maintenant les fichiers)
         Map<String, Object[]> formData = getFormData(request);
         
         // Convertit les données du formulaire en Map<String, Object>
@@ -333,14 +381,72 @@ public class MappingHelper {
         for (int i = 0; i < parameterTypes.length; i++) {
             Class<?> pType = parameterTypes[i];
             java.lang.reflect.Parameter parameter = parameters[i];
-            Object value = null;
+            Object value;
 
-            // Injection spéciale pour les types servlets
+            // 1️⃣ HttpServletRequest / Response
             if (pType == HttpServletRequest.class) {
                 value = request;
-            } else if (pType == HttpServletResponse.class) {
+            }
+            else if (pType == HttpServletResponse.class) {
                 value = response;
-            } else if (Map.class.isAssignableFrom(pType)) {
+            }
+
+            // 2️⃣ MultipartFile (simple)
+            else if (MultipartFile.class.isAssignableFrom(pType)) {
+                String paramName = getParameterName(
+                    parameter,
+                    parameter.getAnnotation(annotations.RequestParam.class)
+                );
+
+                Object fileObj = formDataAsObjectMap.get(paramName);
+                
+                // Gestion spéciale pour les fichiers
+                if (fileObj instanceof MultipartFile) {
+                    value = fileObj;
+                } else if (fileObj instanceof Object[]) {
+                    Object[] array = (Object[]) fileObj;
+                    if (array.length > 0 && array[0] instanceof MultipartFile) {
+                        value = array[0];
+                    } else {
+                        value = null;
+                    }
+                } else {
+                    // Essayer d'extraire depuis formData brut
+                    Object[] rawValues = formData.get(paramName);
+                    if (rawValues != null && rawValues.length > 0 && rawValues[0] instanceof MultipartFile) {
+                        value = rawValues[0];
+                    } else {
+                        value = null;
+                    }
+                }
+            }
+            // 3️⃣ MultipartFile[]
+            else if (pType.isArray()
+                    && MultipartFile.class.isAssignableFrom(pType.getComponentType())) {
+
+                String paramName = getParameterName(
+                    parameter,
+                    parameter.getAnnotation(annotations.RequestParam.class)
+                );
+
+                Object fileObj = formDataAsObjectMap.get(paramName);
+
+                if (fileObj instanceof List) {
+                    List<?> list = (List<?>) fileObj;
+                    value = list.toArray(
+                        (MultipartFile[]) java.lang.reflect.Array
+                            .newInstance(MultipartFile.class, list.size())
+                    );
+                } else if (fileObj instanceof MultipartFile) {
+                    value = new MultipartFile[]{ (MultipartFile) fileObj };
+                } else {
+                    value = new MultipartFile[0];
+                }
+            }
+
+            // 4️⃣ Map
+            else if (Map.class.isAssignableFrom(pType)) {
+
                 Type genericType = parameter.getParameterizedType();
 
                 if (genericType instanceof ParameterizedType) {
@@ -351,90 +457,108 @@ public class MappingHelper {
                         && typeArgs[0] == String.class
                         && typeArgs[1] == Object.class) {
 
-                        // ✅ Map<String, Object> → form data
                         value = formDataAsObjectMap;
-                    } else if (typeArgs[0] == String.class && typeArgs[1] == String.class) {
+                    }
+                    else if (typeArgs[0] == String.class
+                        && typeArgs[1] == String.class) {
 
-                        // ✅ Map<String, String> → path variables
                         value = pathVariables != null ? pathVariables : new HashMap<>();
-                    } else {
+                    }
+                    else {
                         throw new IllegalArgumentException(
                             "Type de Map non supporté : " + genericType.getTypeName()
                         );
                     }
                 } else {
-                    // Map sans génériques (Map raw)
                     value = formDataAsObjectMap;
                 }
-            } 
-            // Vérifie si c'est un objet complexe
+            }
+
+            // 5️⃣ Objet complexe
             else if (isComplexObjectType(pType)) {
-                // C'est un objet complexe : crée une instance et la remplit avec les données
                 try {
                     value = ObjectBinder.bindObject(pType, formDataAsObjectMap, pathVariables);
                 } catch (Exception e) {
                     throw new IllegalArgumentException(
-                        String.format("Impossible de créer l'objet %s : %s", 
-                                    pType.getSimpleName(), e.getMessage()), e);
+                        "Impossible de créer l'objet " + pType.getSimpleName(), e
+                    );
                 }
-            } else {
-                // Vérifie si le paramètre a l'annotation @RequestParam
-                annotations.RequestParam requestParamAnnotation = 
+            }
+
+            // 6️⃣ @RequestParam simple
+            else {
+                annotations.RequestParam requestParamAnnotation =
                     parameter.getAnnotation(annotations.RequestParam.class);
-                
-                // Détermine le nom du paramètre à utiliser
+
                 String paramName = getParameterName(parameter, requestParamAnnotation);
-                
-                boolean valueFound = false;
-                
-                // Recherche dans les path variables
+
                 if (pathVariables != null && pathVariables.containsKey(paramName)) {
                     value = convertParameterValue(pathVariables.get(paramName), pType);
-                    valueFound = true;
-                } 
-                // Recherche dans les données du formulaire
+                }
                 else if (formData.containsKey(paramName)) {
                     value = convertParameterValue(formDataAsObjectMap.get(paramName), pType);
-                    valueFound = true;
                 }
-                
-                // Si aucune valeur n'a été trouvée
-                if (!valueFound) {
-                    if (requestParamAnnotation != null) {
-                        // Avec @RequestParam mais valeur non trouvée
-                        if (pType.isPrimitive()) {
-                            throw new IllegalArgumentException(
-                                String.format("Paramètre requis non trouvé: '%s'. Le paramètre annoté @RequestParam '%s' (type: %s) est requis mais n'a pas été fourni.",
-                                            paramName, parameter.getName(), pType.getSimpleName()));
-                        } else {
-                            // Pour les objets, on peut utiliser null
-                            value = null;
-                        }
-                    } else {
-                        // SANS annotation @RequestParam et valeur non trouvée = ERREUR
-                        throw new IllegalArgumentException(
-                            String.format("Paramètre non mappé: '%s'. Le paramètre '%s' (type: %s) n'est pas annoté avec @RequestParam et ne correspond à aucun paramètre de la requête.",
-                                        paramName, parameter.getName(), pType.getSimpleName()));
-                    }
+                else if (requestParamAnnotation != null && !pType.isPrimitive()) {
+                    value = null;
+                }
+                else {
+                    throw new IllegalArgumentException(
+                        "Paramètre requis non trouvé : " + paramName
+                    );
                 }
             }
 
             parametersValues[i] = value;
         }
-        
+
         return parametersValues;
     }   
         
     /**
-     * Récupère les données du formulaire (GET ou POST)
+     * Récupère les données du formulaire, y compris les fichiers
      * 
      * @param request La requête HTTP
      * @return Une map contenant tous les paramètres de la requête
      */
-    public Map<String, Object[]> getFormData(HttpServletRequest request) {
+    public Map<String, Object[]> getFormData(HttpServletRequest request) 
+            throws IOException, ServletException {
+        
         Map<String, Object[]> data = new HashMap<>();
         
-        // Récupère tous les paramètres (GET ou POST)
+        String contentType = request.getContentType();
+        boolean isMultipart = contentType != null && contentType.toLowerCase().startsWith("multipart/");
+        
+        if (isMultipart) {
+            // Traiter exclusivement via parts (évite double parsing)
+            try {
+                Collection<Part> parts = request.getParts();
+                for (Part part : parts) {
+                    String paramName = part.getName();
+                    if (paramName == null) continue;
+                    
+                    if (part.getSubmittedFileName() != null && !part.getSubmittedFileName().isEmpty()) {
+                        // Fichier
+                        MultipartFile multipartFile = new StandardMultipartFile(part);
+                        // si plusieurs fichiers pour le même param, garder le dernier (ou gérer liste si tu veux)
+                        data.put(paramName, new Object[]{multipartFile});
+                    } else {
+                        // Champ texte
+                        String value = getPartValue(part, request.getCharacterEncoding());
+                        if (value != null) {
+                            data.put(paramName, new String[]{value});
+                        }
+                    }
+                }
+            } catch (IllegalStateException | IOException | ServletException e) {
+                // Sur certains containers getParts peut échouer si multipart non supporté
+                System.err.println("Warning: Multipart processing not supported: " + e.getMessage());
+                // Fallback: utiliser les paramètres normaux
+            }
+            // IMPORTANT : ne pas appeler request.getParameterNames() ici (double parsing)
+            return data;
+        }
+        
+        // Non-multipart : utiliser les paramètres normaux
         java.util.Enumeration<String> paramNames = request.getParameterNames();
         while (paramNames.hasMoreElements()) {
             String paramName = paramNames.nextElement();
@@ -443,6 +567,19 @@ public class MappingHelper {
         }
         
         return data;
+    }
+
+    /**
+     * Lit la valeur d'une Part (pour les paramètres non-fichiers)
+     */
+    private String getPartValue(Part part, String charset) throws IOException {
+        if (part == null) return null;
+        if (charset == null) charset = "UTF-8";
+        try (InputStream inputStream = part.getInputStream()) {
+            byte[] bytes = inputStream.readAllBytes();
+            if (bytes.length == 0) return null;
+            return new String(bytes, charset);
+        }
     }
     
     /**
@@ -486,6 +623,22 @@ public class MappingHelper {
             return value;
         }
         
+        // Gestion de MultipartFile
+        if (MultipartFile.class.isAssignableFrom(targetType)) {
+            if (value instanceof MultipartFile) {
+                return value;
+            } else if (value instanceof MultipartFile[]) {
+                MultipartFile[] arr = (MultipartFile[]) value;
+                return arr.length > 0 ? arr[0] : null;
+            } else if (value instanceof Object[] && ((Object[]) value).length > 0) {
+                Object first = ((Object[]) value)[0];
+                if (first instanceof MultipartFile) {
+                    return first;
+                }
+            }
+            return null;
+        }
+
         // Si la valeur est un tableau (cas des valeurs multiples)
         if (value.getClass().isArray()) {
             Object[] array = (Object[]) value;
