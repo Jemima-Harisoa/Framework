@@ -182,7 +182,7 @@ Ce qu'il se passe :
 - Les utilisateurs peuvent communiquer des informations de session maintenues entre les requêtes
 
 Ce qu'il faut faire:
-Point d’injection : juste avant l’appel de la méthode dans le Front Controller (RedirectionServlet)
+Point d’injection : juste avant l’appel de la méthode dans le RedirectionServlet
 Annotation @Session : indique l’intention, priorité sur le nom
 Annotation @SessionParam : injecte la valeur de session, création automatique si elle n’existe pas encore
 Nom de la session : priorité à l’annotation, sinon nom du paramètre

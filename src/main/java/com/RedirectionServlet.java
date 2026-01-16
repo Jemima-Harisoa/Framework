@@ -13,8 +13,8 @@ import com.MappingHelper.MethodMatchResult;
 import com.google.gson.Gson;
 
 import annotations.Controller;
-import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.ServletException;
+import jakarta.servlet.annotation.MultipartConfig;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
@@ -43,7 +43,9 @@ import model.View;
 public class RedirectionServlet extends HttpServlet {
 
     private static final long serialVersionUID = 1L;
-    
+    // Maps pour les sessions
+    private Map<String, Object> Session = new HashMap<>();
+
     // Maps et listes pour stocker les mappings
     private Map<String, MappedMethod> urlMethodMap = new HashMap<>();
     private List<MappedMethod> dynamicUrlMethods = new ArrayList<>();
