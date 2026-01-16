@@ -175,3 +175,18 @@ public View handleFileUpload(@RequestParam("file") MultipartFile file) {
     fileService.saveFile(file);
     return new View("uploadSuccess", "File uploaded successfully");
 }
+
+Sprint 11:
+Objectif: mis en place de gestion de session 
+Ce qu'il se passe :
+- Les utilisateurs peuvent communiquer des informations de session maintenues entre les requêtes
+
+Ce qu'il faut faire:
+Point d’injection : juste avant l’appel de la méthode dans le Front Controller (RedirectionServlet)
+Annotation @Session : indique l’intention, priorité sur le nom
+Annotation @SessionParam : injecte la valeur de session, création automatique si elle n’existe pas encore
+Nom de la session : priorité à l’annotation, sinon nom du paramètre
+Types autorisés : objets ou wrappers (Integer, Boolean, etc.), pas de primitifs
+Multiple @SessionParam : autorisé par méthode, chaque clé distincte dans la session
+Isolation : chaque sessionId a sa propre Map (Map<String,Object>), jamais de static global pour les données utilisateur
+Extensible : aujourd’hui Map, demain HttpSession, Redis ou autre
