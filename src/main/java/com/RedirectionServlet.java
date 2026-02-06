@@ -403,7 +403,10 @@ public class RedirectionServlet extends HttpServlet {
     }
     
     /**
-     * Envoie la View vers la JSP : place les données en attribut(s) et forward vers le template
+     * Envoie la View vers la JSP ou effectue une redirection
+     * Gère deux cas :
+     * 1. Redirection : si le template commence par "redirect:", effectue une redirection HTTP
+     * 2. Forward JSP : place les données en attribut(s) et forward vers le template JSP
      * 
      * @param request La requête HTTP
      * @param response La réponse HTTP
@@ -414,6 +417,39 @@ public class RedirectionServlet extends HttpServlet {
         if (view == null) {
             throw new IllegalArgumentException("View ne peut pas être null");
         }
+        
+        // =====================================================
+        // CAS 1: REDIRECTION (template commence par "redirect:")
+        // =====================================================
+        if (view.isRedirect()) {
+            String redirectUrl = view.getRedirectUrl();
+            if (redirectUrl == null || redirectUrl.isBlank()) {
+                throw new ServletException("URL de redirection invalide dans la View");
+            }
+            
+            // Construire l'URL complète avec le contexte de l'application
+            String fullUrl;
+            if (redirectUrl.startsWith("http://") || redirectUrl.startsWith("https://")) {
+                // URL absolue externe
+                fullUrl = redirectUrl;
+            } else {
+                // URL relative - ajouter le contexte de l'application
+                String contextPath = request.getContextPath();
+                if (redirectUrl.startsWith("/")) {
+                    fullUrl = contextPath + redirectUrl;
+                } else {
+                    fullUrl = contextPath + "/" + redirectUrl;
+                }
+            }
+            
+            // Effectuer la redirection HTTP 302
+            response.sendRedirect(fullUrl);
+            return;
+        }
+        
+        // =====================================================
+        // CAS 2: FORWARD JSP (comportement normal)
+        // =====================================================
         
         String template = view.getTemplate();
         String name = view.getName();

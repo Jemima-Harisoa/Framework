@@ -189,4 +189,16 @@ Nom de la session : priorité à l’annotation, sinon nom du paramètre
 Types autorisés : objets ou wrappers (Integer, Boolean, etc.), pas de primitifs
 Multiple @SessionParam : autorisé par méthode, chaque clé distincte dans la session
 Isolation : chaque sessionId a sa propre Map (Map<String,Object>), jamais de static global pour les données utilisateur
-Extensible : aujourd’hui Map, demain HttpSession, Redis ou autre
+Extensible : aujourd’hui Map, demain HttpSession, Redis ou 
+
+Sprint 11 bis:
+Objectif: protection des methode d'action dans le controller avec des roles (ex: admin user guest)
+- Annotation @Role et @Authorized sur les methodes des controller 
+
+Ce qu'il se passe :
+- Les methodes des controller peuvent etre protégé par des roles et des autorisations
+- Dans un fichier de configuration on definit les roles et les autorisations
+avec une variable definit au prealable 
+
+Ce qu'il faut faire:
+- Mettre en place un fichier de configuration (ex: .xml, .properties) qui definit les roles et les autorisations applicable et comment les attribuer
