@@ -1,4 +1,5 @@
 com\StandardMultipartFile.class
+com\SessionManager$SessionMetadata.class
 com\MappingHelper$MethodMatchResult.class
 lookup\ClassScanner$ClassFilter.class
 annotations\Mapping.class
@@ -23,6 +24,7 @@ annotations\JsonMapping.class
 annotations\PostMapping.class
 com\JsonResponseHandler.class
 com\SessionManager.class
+examples\SessionExampleController.class
 lookup\ClassScanner.class
 com\EntityBinder.class
 annotations\Controller.class
