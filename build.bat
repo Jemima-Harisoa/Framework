@@ -5,12 +5,12 @@ REM === Configuration simple ===
 set "ROOT=%cd%"
 set "TARGET_DIR=%ROOT%\target"
 
-REM Détection du projet Test-Framework
-set "TEST_DIR=%~dp0..\Test-Framework"
-if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0..\TEST-FRAMEWORK"
-if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0..\test-framework"
+REM Détection du projet ControlTower\controlTowerBackoffice
+set "TEST_DIR=%~dp0..\ControlTower\controlTowerBackoffice"
+if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0..\ControlTower"
+if not exist "!TEST_DIR!" set "TEST_DIR=%~dp0..\controlTowerBackoffice"
 
-set "TEST_LIB=!TEST_DIR!\lib"
+set "TEST_LIB=!TEST_DIR!\src\main\webapp\WEB-INF\lib"
 
 echo Framework: !ROOT!
 echo Test dir : !TEST_DIR!
@@ -43,7 +43,7 @@ if "!JAR!"=="" (
 echo JAR trouve : !JAR!
 echo.
 
-REM === 3) Copier vers Test-Framework\src\webapp\WEB-INF\lib ===
+REM === 3) Copier vers ControlTower\controlTowerBackoffice\src\main\webapp\WEB-INF\lib ===
 echo 3) Copie vers !TEST_LIB! ...
 if exist "!TEST_DIR!" (
     if not exist "!TEST_LIB!" mkdir "!TEST_LIB!"
@@ -55,8 +55,8 @@ if exist "!TEST_DIR!" (
     )
     echo ✅ Copie terminee.
 ) else (
-    echo ⚠️ Dossier Test-Framework introuvable a l'emplacement attendu : !TEST_DIR!
-    echo    Cree un projet Test-Framework/ au meme niveau que Framework/ puis relance.
+    echo ⚠️ Dossier ControlTower\controlTowerBackoffice introuvable a l'emplacement attendu : !TEST_DIR!
+    echo    Cree un projet ControlTower\controlTowerBackoffice/ au meme niveau que Framework/ puis relance.
     pause
     exit /b 1
 )

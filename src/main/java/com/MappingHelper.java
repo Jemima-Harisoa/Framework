@@ -378,6 +378,9 @@ public class MappingHelper {
         // Convertit les données du formulaire en Map<String, Object>
         Map<String, Object> formDataAsObjectMap = convertFormDataToObjectMap(formData);
 
+        // Gestion de session : récupère ou crée une session
+        String sessionId = SessionManager.getOrCreateSession(request, response);
+
         for (int i = 0; i < parameterTypes.length; i++) {
             Class<?> pType = parameterTypes[i];
             java.lang.reflect.Parameter parameter = parameters[i];
@@ -390,8 +393,13 @@ public class MappingHelper {
             else if (pType == HttpServletResponse.class) {
                 value = response;
             }
+            
+            // 🆕 2️⃣ Paramètres de session (@SessionParam)
+            else if (parameter.isAnnotationPresent(annotations.SessionParam.class)) {
+                value = prepareSessionParameter(parameter, pType, sessionId);
+            }
 
-            // 2️⃣ MultipartFile (simple)
+            // 3️⃣ MultipartFile (simple)
             else if (MultipartFile.class.isAssignableFrom(pType)) {
                 String paramName = getParameterName(
                     parameter,
@@ -420,7 +428,7 @@ public class MappingHelper {
                     }
                 }
             }
-            // 3️⃣ MultipartFile[]
+            // 4️⃣ MultipartFile[]
             else if (pType.isArray()
                     && MultipartFile.class.isAssignableFrom(pType.getComponentType())) {
 
@@ -444,7 +452,7 @@ public class MappingHelper {
                 }
             }
 
-            // 4️⃣ Map
+            // 5️⃣ Map
             else if (Map.class.isAssignableFrom(pType)) {
 
                 Type genericType = parameter.getParameterizedType();
@@ -474,7 +482,7 @@ public class MappingHelper {
                 }
             }
 
-            // 5️⃣ Objet complexe
+            // 6️⃣ Objet complexe
             else if (isComplexObjectType(pType)) {
                 try {
                     value = ObjectBinder.bindObject(pType, formDataAsObjectMap, pathVariables);
@@ -485,7 +493,7 @@ public class MappingHelper {
                 }
             }
 
-            // 6️⃣ @RequestParam simple
+            // 7️⃣ @RequestParam simple
             else {
                 annotations.RequestParam requestParamAnnotation =
                     parameter.getAnnotation(annotations.RequestParam.class);
@@ -686,6 +694,66 @@ public class MappingHelper {
         
         // Si aucune conversion n'est possible, retourne la valeur telle quelle
         return value;
+    }
+    
+    /**
+     * Prépare un paramètre de session annoté avec @SessionParam
+     * 
+     * @param parameter Le paramètre Java
+     * @param parameterType Le type du paramètre
+     * @param sessionId L'ID de session
+     * @return La valeur du paramètre depuis la session
+     */
+    private Object prepareSessionParameter(java.lang.reflect.Parameter parameter, 
+                                          Class<?> parameterType, 
+                                          String sessionId) {
+        annotations.SessionParam sessionParam = parameter.getAnnotation(annotations.SessionParam.class);
+        
+        // Déterminer le nom de la clé en session
+        String sessionKey = getSessionParameterName(parameter, sessionParam);
+        
+        // Récupérer la valeur depuis la session
+        Object sessionValue = SessionManager.getSessionValue(sessionId, sessionKey);
+        
+        if (sessionValue == null) {
+            // La valeur n'existe pas en session
+            if (sessionParam.required()) {
+                throw new IllegalArgumentException(
+                    "Paramètre de session requis non trouvé: " + sessionKey
+                );
+            }
+            
+            // Utiliser la valeur par défaut si spécifiée
+            String defaultValue = sessionParam.defaultValue();
+            if (!defaultValue.isEmpty()) {
+                return convertParameterValue(defaultValue, parameterType);
+            }
+            
+            // Retourner la valeur par défaut du type
+            return getDefaultForType(parameterType);
+        }
+        
+        // Convertir la valeur au type attendu
+        return convertParameterValue(sessionValue, parameterType);
+    }
+    
+    /**
+     * Détermine le nom de la clé en session pour un paramètre @SessionParam
+     */
+    private String getSessionParameterName(java.lang.reflect.Parameter parameter,
+                                          annotations.SessionParam sessionParam) {
+        // Priorité 1: value() dans l'annotation
+        if (!sessionParam.value().isEmpty()) {
+            return sessionParam.value();
+        }
+        
+        // Priorité 2: name() dans l'annotation
+        if (!sessionParam.name().isEmpty()) {
+            return sessionParam.name();
+        }
+        
+        // Priorité 3: nom du paramètre Java
+        return parameter.getName();
     }
 
 }

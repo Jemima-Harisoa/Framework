@@ -73,4 +73,66 @@ public class View {
 
     public View() {
     }
+    
+    /**
+     * Vérifie si cette vue est une redirection
+     * Une redirection est identifiée par un template qui commence par "redirect:"
+     * 
+     * @return true si c'est une redirection, false sinon
+     */
+    public boolean isRedirect() {
+        return template != null && template.startsWith("redirect:");
+    }
+    
+    /**
+     * Extrait l'URL de redirection si c'est une redirection
+     * 
+     * @return l'URL de redirection sans le préfixe "redirect:", ou null si ce n'est pas une redirection
+     */
+    public String getRedirectUrl() {
+        if (isRedirect()) {
+            String url = template.substring("redirect:".length());
+            // Assure que l'URL commence par "/" pour être absolue dans le contexte de l'application
+            return url.startsWith("/") ? url : "/" + url;
+        }
+        return null;
+    }
+    
+    // =====================================================
+    // MÉTHODES UTILITAIRES STATIQUES
+    // =====================================================
+    
+    /**
+     * Méthode utilitaire pour créer une redirection facilement
+     * Utilisation : return View.redirect("users");
+     * 
+     * @param url L'URL vers laquelle rediriger (sans le préfixe "redirect:")
+     * @return Une nouvelle instance de View configurée pour la redirection
+     */
+    public static View redirect(String url) {
+        return new View("redirect:" + url);
+    }
+    
+    /**
+     * Méthode utilitaire pour créer une vue JSP normale
+     * Utilisation : return View.page("users");
+     * 
+     * @param templateName Le nom du template JSP
+     * @return Une nouvelle instance de View pour l'affichage JSP
+     */
+    public static View page(String templateName) {
+        return new View(templateName);
+    }
+    
+    /**
+     * Méthode utilitaire pour créer une vue JSP avec des données
+     * Utilisation : return View.page("users", userList);
+     * 
+     * @param templateName Le nom du template JSP
+     * @param data Les données à passer à la JSP
+     * @return Une nouvelle instance de View avec les données
+     */
+    public static View page(String templateName, Object data) {
+        return new View("model", templateName, data);
+    }
 }
